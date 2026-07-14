@@ -210,6 +210,22 @@ class ImportResult(BaseModel):
     status: ImportStatus
 
 
+class ImportPreviewRow(BaseModel):
+    date: date
+    description: str
+    amount: Decimal
+    kind: TransactionKind
+
+
+class ImportPreview(BaseModel):
+    file_type: Literal["csv", "pdf"]
+    columns: list[str] | None = None
+    mapping: ImportColumnMapping
+    rows: list[ImportPreviewRow]
+    row_count: int
+    errors: list[str]
+
+
 # --- recurring rules ---
 
 

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 const NAV_ITEMS = [
   { to: '/', label: 'Resumo', end: true },
   { to: '/transactions', label: 'Transações' },
+  { to: '/import', label: 'Importar' },
   { to: '/recurring', label: 'Recorrências' },
   { to: '/calendar', label: 'Calendário' },
   { to: '/accounts', label: 'Contas & categorias' },

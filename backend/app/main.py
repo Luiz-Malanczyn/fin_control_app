@@ -10,6 +10,7 @@ from app.routers import (
     dashboard,
     groups,
     household,
+    imports,
     recurring,
     transactions,
 )
@@ -31,6 +32,7 @@ app.include_router(categories.router)
 app.include_router(budgets.router)
 app.include_router(groups.router)
 app.include_router(transactions.router)
+app.include_router(imports.router)
 app.include_router(recurring.router)
 app.include_router(dashboard.router)
 

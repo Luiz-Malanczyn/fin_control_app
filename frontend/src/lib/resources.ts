@@ -82,27 +82,62 @@ export const transactionsApi = {
     }>,
   ) => api.patch<Transaction>(`/transactions/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/transactions/${id}`),
-  importCsv: (
-    accountId: number,
-    file: File,
-    mapping: {
-      date_column: string
-      description_column: string
-      amount_column: string
-      date_format: string
-      amount_convention: 'income_positive' | 'expense_positive' | 'all_expense'
-    },
-  ) => {
+}
+
+export type AmountConvention = 'income_positive' | 'expense_positive' | 'all_expense'
+
+export type CsvMapping = {
+  date_column: string
+  description_column: string
+  amount_column: string
+  date_format: string
+  amount_convention: AmountConvention
+}
+
+export type ImportPreviewRow = {
+  date: string
+  description: string
+  amount: string
+  kind: 'expense' | 'income'
+}
+
+export type ImportPreview = {
+  file_type: 'csv' | 'pdf'
+  columns: string[] | null
+  mapping: CsvMapping
+  rows: ImportPreviewRow[]
+  row_count: number
+  errors: string[]
+}
+
+export type ImportResult = {
+  import_id: number
+  row_count: number
+  skipped_duplicates: number
+  errors: string[]
+  status: string
+}
+
+export const importApi = {
+  detect: (file: File, overrides?: Partial<CsvMapping>) => {
     const form = new FormData()
     form.append('file', file)
-    return api.post<{ import_id: number; row_count: number; skipped_duplicates: number; errors: string[] }>(
-      `/transactions/import`,
-      form,
-      {
+    return api
+      .post<ImportPreview>('/transactions/import/detect', form, {
+        params: overrides,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
+  commit: (accountId: number, file: File, mapping: CsvMapping) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api
+      .post<ImportResult>('/transactions/import', form, {
         params: { account_id: accountId, ...mapping },
         headers: { 'Content-Type': 'multipart/form-data' },
-      },
-    )
+      })
+      .then((r) => r.data)
   },
 }
 

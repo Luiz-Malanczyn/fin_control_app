@@ -1,33 +1,13 @@
-import csv
-import io
-from collections import Counter
 from datetime import date
-from decimal import InvalidOperation
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.csv_import import apply_amount_convention, parse_amount, parse_date
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import (
-    Account,
-    ImportBatch,
-    ImportStatus,
-    Transaction,
-    TransactionKind,
-    TransactionSource,
-    User,
-)
-from app.schemas import (
-    AmountConvention,
-    ImportColumnMapping,
-    ImportResult,
-    TransactionCreate,
-    TransactionOut,
-    TransactionUpdate,
-)
+from app.models import Account, Transaction, TransactionSource, User
+from app.schemas import TransactionCreate, TransactionOut, TransactionUpdate
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -121,120 +101,3 @@ def delete_transaction(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transação não encontrada")
     db.delete(transaction)
     db.commit()
-
-
-@router.post("/import", response_model=ImportResult, status_code=status.HTTP_201_CREATED)
-def import_transactions(
-    account_id: int,
-    file: UploadFile = File(...),
-    date_column: str = Query(default="date"),
-    description_column: str = Query(default="description"),
-    amount_column: str = Query(default="amount"),
-    date_format: str = Query(default="%Y-%m-%d"),
-    amount_convention: AmountConvention = Query(default="income_positive"),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> ImportResult:
-    mapping = ImportColumnMapping(
-        date_column=date_column,
-        description_column=description_column,
-        amount_column=amount_column,
-        date_format=date_format,
-        amount_convention=amount_convention,
-    )
-    account = db.get(Account, account_id)
-    if account is None or account.household_id != user.household_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
-
-    raw = file.file.read().decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(raw))
-    if reader.fieldnames is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Arquivo CSV vazio ou inválido")
-
-    required = {mapping.date_column, mapping.description_column, mapping.amount_column}
-    missing = required - set(reader.fieldnames)
-    if missing:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Colunas não encontradas no CSV: {', '.join(sorted(missing))}. "
-            f"Colunas disponíveis: {', '.join(reader.fieldnames)}",
-        )
-
-    # Quantas vezes cada (data, descrição, valor, tipo) já foi lançada nessa conta,
-    # pra não duplicar quando extratos se sobrepõem (ex: fatura mensal + extrato
-    # consolidado cobrindo o mesmo período). Usa contagem, não presença: duas
-    # transações genuinamente iguais no mesmo dia (ex: dois Pix idênticos de R$3
-    # para o mesmo destinatário) não podem virar uma só.
-    existing_counts: Counter[tuple] = Counter(
-        (t.date, t.description, t.amount, t.kind)
-        for t in db.scalars(
-            select(Transaction).where(
-                Transaction.household_id == user.household_id, Transaction.account_id == account_id
-            )
-        )
-    )
-    seen_counts: Counter[tuple] = Counter()
-
-    batch = ImportBatch(
-        household_id=user.household_id,
-        user_id=user.id,
-        filename=file.filename or "extrato.csv",
-        status=ImportStatus.processing,
-    )
-    db.add(batch)
-    db.flush()
-
-    row_count = 0
-    skipped_duplicates = 0
-    errors: list[str] = []
-
-    for row_number, row in enumerate(reader, start=2):
-        raw_date = (row.get(mapping.date_column) or "").strip()
-        raw_amount = (row.get(mapping.amount_column) or "").strip()
-        description = (row.get(mapping.description_column) or "").strip()
-
-        if not raw_date and not raw_amount and not description:
-            continue  # linha em branco (comum no fim de exports do Nubank)
-
-        try:
-            parsed_date = parse_date(raw_date, mapping.date_format)
-            parsed_amount = parse_amount(raw_amount)
-        except (ValueError, InvalidOperation) as exc:
-            errors.append(f"Linha {row_number}: {exc}")
-            continue
-
-        amount, kind_value = apply_amount_convention(parsed_amount, mapping.amount_convention)
-        kind = TransactionKind(kind_value)
-
-        key = (parsed_date, description, amount, kind)
-        seen_counts[key] += 1
-        if seen_counts[key] <= existing_counts[key]:
-            skipped_duplicates += 1
-            continue
-
-        db.add(
-            Transaction(
-                household_id=user.household_id,
-                user_id=user.id,
-                account_id=account_id,
-                date=parsed_date,
-                description=description,
-                amount=amount,
-                kind=kind,
-                source=TransactionSource.import_,
-                import_batch_id=batch.id,
-            )
-        )
-        row_count += 1
-
-    batch.row_count = row_count
-    batch.status = ImportStatus.done
-    db.commit()
-
-    return ImportResult(
-        import_id=batch.id,
-        row_count=row_count,
-        skipped_duplicates=skipped_duplicates,
-        errors=errors,
-        status=batch.status,
-    )
