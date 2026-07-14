@@ -1,0 +1,107 @@
+export type AccountType = 'checking' | 'credit_card' | 'cash' | 'savings'
+export type TransactionKind = 'expense' | 'income'
+export type RecurrenceFrequency = 'monthly' | 'weekly'
+export type TransactionSource = 'manual' | 'import' | 'recurring' | 'installment'
+
+export type Account = {
+  id: number
+  name: string
+  type: AccountType
+}
+
+export type Category = {
+  id: number
+  name: string
+  parent_id: number | null
+  color: string | null
+}
+
+export type TransactionGroup = {
+  id: number
+  name: string
+}
+
+export type Transaction = {
+  id: number
+  account_id: number
+  category_id: number | null
+  group_id: number | null
+  date: string
+  description: string
+  amount: string
+  kind: TransactionKind
+  source: TransactionSource
+  installment_number: number | null
+}
+
+export type RecurringRule = {
+  id: number
+  account_id: number
+  category_id: number | null
+  description: string
+  amount: string
+  kind: TransactionKind
+  frequency: RecurrenceFrequency
+  day_of_month: number | null
+  weekday: number | null
+  start_date: string
+  end_date: string | null
+}
+
+export type Installment = {
+  id: number
+  account_id: number
+  category_id: number | null
+  description: string
+  total_amount: string
+  installment_count: number
+  installment_amount: string
+  start_date: string
+}
+
+export type CalendarItem = {
+  date: string
+  description: string
+  amount: string
+  kind: TransactionKind
+  source: TransactionSource
+}
+
+export type CategorySummary = {
+  category_id: number | null
+  category_name: string
+  total: string
+}
+
+export type SummaryOut = {
+  period_start: string
+  period_end: string
+  total_income: string
+  total_expense: string
+  by_category: CategorySummary[]
+}
+
+export type ForecastOut = {
+  as_of: string
+  month_start: string
+  month_end: string
+  current_balance: string
+  expected_income_remaining: string
+  expenses_posted: string
+  fixed_expenses_remaining: string
+  installments_remaining: string
+  projected_month_end_balance: string
+}
+
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  checking: 'Conta corrente',
+  credit_card: 'Cartão de crédito',
+  cash: 'Dinheiro',
+  savings: 'Poupança',
+}
+
+export const WEEKDAY_LABELS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+
+export function formatCurrency(value: string | number): string {
+  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
