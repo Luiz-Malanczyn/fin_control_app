@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -10,6 +11,12 @@ from app.models import (
     TransactionKind,
     TransactionSource,
 )
+
+# Convenção de sinal usada pelo banco no CSV exportado:
+# - income_positive: positivo = receita, negativo = despesa (extratos de conta)
+# - expense_positive: positivo = despesa, negativo = estorno/crédito (faturas de cartão)
+# - all_expense: ignora o sinal, tudo vira despesa (extratos só de gastos)
+AmountConvention = Literal["income_positive", "expense_positive", "all_expense"]
 
 # --- auth ---
 
@@ -119,14 +126,14 @@ class ImportColumnMapping(BaseModel):
     description_column: str = "description"
     amount_column: str = "amount"
     date_format: str = "%Y-%m-%d"
-    # Se True, valores negativos no CSV viram despesa e positivos viram receita.
-    # Se False, todo valor é tratado como despesa (comum em extratos "só de gastos").
-    signed_amounts: bool = True
+    amount_convention: AmountConvention = "income_positive"
 
 
 class ImportResult(BaseModel):
     import_id: int
     row_count: int
+    skipped_duplicates: int
+    errors: list[str]
     status: ImportStatus
 
 

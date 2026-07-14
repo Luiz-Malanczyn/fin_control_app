@@ -1,6 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { accountsApi, categoriesApi, groupsApi, transactionsApi } from '../lib/resources'
-import { formatCurrency, type Account, type Category, type Transaction, type TransactionGroup } from '../lib/types'
+import {
+  IMPORT_PRESETS,
+  formatCurrency,
+  type Account,
+  type AmountConvention,
+  type Category,
+  type Transaction,
+  type TransactionGroup,
+} from '../lib/types'
 
 function firstDayOfMonth(): string {
   const d = new Date()
@@ -32,10 +40,25 @@ export default function Transactions() {
   const [importAccountId, setImportAccountId] = useState<number | ''>('')
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importMessage, setImportMessage] = useState<string | null>(null)
-  const [dateColumn, setDateColumn] = useState('date')
-  const [descriptionColumn, setDescriptionColumn] = useState('description')
-  const [amountColumn, setAmountColumn] = useState('amount')
-  const [dateFormat, setDateFormat] = useState('%Y-%m-%d')
+  const [importErrors, setImportErrors] = useState<string[]>([])
+  const [presetKey, setPresetKey] = useState<keyof typeof IMPORT_PRESETS>('nubank_conta')
+  const [dateColumn, setDateColumn] = useState(IMPORT_PRESETS.nubank_conta.date_column)
+  const [descriptionColumn, setDescriptionColumn] = useState(IMPORT_PRESETS.nubank_conta.description_column)
+  const [amountColumn, setAmountColumn] = useState(IMPORT_PRESETS.nubank_conta.amount_column)
+  const [dateFormat, setDateFormat] = useState(IMPORT_PRESETS.nubank_conta.date_format)
+  const [amountConvention, setAmountConvention] = useState<AmountConvention>(
+    IMPORT_PRESETS.nubank_conta.amount_convention,
+  )
+
+  function applyPreset(key: keyof typeof IMPORT_PRESETS) {
+    const preset = IMPORT_PRESETS[key]
+    setPresetKey(key)
+    setDateColumn(preset.date_column)
+    setDescriptionColumn(preset.description_column)
+    setAmountColumn(preset.amount_column)
+    setDateFormat(preset.date_format)
+    setAmountConvention(preset.amount_convention)
+  }
 
   function reloadTransactions() {
     transactionsApi.list({ date_from: dateFrom, date_to: dateTo }).then(setTransactions)
@@ -84,6 +107,7 @@ export default function Transactions() {
   async function handleImport(event: FormEvent) {
     event.preventDefault()
     setImportMessage(null)
+    setImportErrors([])
     if (importAccountId === '' || !importFile) {
       setImportMessage('Escolha a conta e o arquivo CSV.')
       return
@@ -94,12 +118,19 @@ export default function Transactions() {
         description_column: descriptionColumn,
         amount_column: amountColumn,
         date_format: dateFormat,
-        signed_amounts: true,
+        amount_convention: amountConvention,
       })
-      setImportMessage(`${data.row_count} lançamentos importados.`)
+      const parts = [`${data.row_count} lançamentos importados.`]
+      if (data.skipped_duplicates > 0) parts.push(`${data.skipped_duplicates} duplicados ignorados.`)
+      if (data.errors.length > 0) parts.push(`${data.errors.length} linhas com erro.`)
+      setImportMessage(parts.join(' '))
+      setImportErrors(data.errors)
       reloadTransactions()
-    } catch {
-      setImportMessage('Não foi possível importar. Confira o nome das colunas do CSV.')
+    } catch (err) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        'Confira o nome das colunas e o formato da data.'
+      setImportMessage(`Não foi possível importar. ${detail}`)
     }
   }
 
@@ -200,6 +231,21 @@ export default function Transactions() {
             </button>
           </div>
           <div className="form-row" style={{ marginTop: 10 }}>
+            <label className="field" style={{ flex: 1, minWidth: 260 }}>
+              Formato do arquivo
+              <select
+                value={presetKey}
+                onChange={(e) => applyPreset(e.target.value as keyof typeof IMPORT_PRESETS)}
+              >
+                {Object.entries(IMPORT_PRESETS).map(([key, preset]) => (
+                  <option key={key} value={key}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="form-row" style={{ marginTop: 10 }}>
             <label className="field">
               Coluna data
               <input value={dateColumn} onChange={(e) => setDateColumn(e.target.value)} />
@@ -216,9 +262,28 @@ export default function Transactions() {
               Formato da data
               <input value={dateFormat} onChange={(e) => setDateFormat(e.target.value)} />
             </label>
+            <label className="field">
+              Convenção de sinal
+              <select
+                value={amountConvention}
+                onChange={(e) => setAmountConvention(e.target.value as AmountConvention)}
+              >
+                <option value="income_positive">Positivo = receita</option>
+                <option value="expense_positive">Positivo = despesa</option>
+                <option value="all_expense">Tudo é despesa</option>
+              </select>
+            </label>
           </div>
         </form>
         {importMessage && <p className="empty-hint" style={{ marginTop: 10 }}>{importMessage}</p>}
+        {importErrors.length > 0 && (
+          <ul className="empty-hint" style={{ marginTop: 6 }}>
+            {importErrors.slice(0, 10).map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+            {importErrors.length > 10 && <li>… e mais {importErrors.length - 10}.</li>}
+          </ul>
+        )}
       </div>
 
       <div className="card">

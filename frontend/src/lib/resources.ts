@@ -52,15 +52,19 @@ export const transactionsApi = {
       description_column: string
       amount_column: string
       date_format: string
-      signed_amounts: boolean
+      amount_convention: 'income_positive' | 'expense_positive' | 'all_expense'
     },
   ) => {
     const form = new FormData()
     form.append('file', file)
-    return api.post(`/transactions/import`, form, {
-      params: { account_id: accountId, ...mapping },
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post<{ import_id: number; row_count: number; skipped_duplicates: number; errors: string[] }>(
+      `/transactions/import`,
+      form,
+      {
+        params: { account_id: accountId, ...mapping },
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    )
   },
 }
 

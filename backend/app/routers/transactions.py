@@ -1,12 +1,14 @@
 import csv
 import io
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from collections import Counter
+from datetime import date
+from decimal import InvalidOperation
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.csv_import import apply_amount_convention, parse_amount, parse_date
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
@@ -19,6 +21,7 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    AmountConvention,
     ImportColumnMapping,
     ImportResult,
     TransactionCreate,
@@ -101,7 +104,7 @@ def import_transactions(
     description_column: str = Query(default="description"),
     amount_column: str = Query(default="amount"),
     date_format: str = Query(default="%Y-%m-%d"),
-    signed_amounts: bool = Query(default=True),
+    amount_convention: AmountConvention = Query(default="income_positive"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ImportResult:
@@ -110,7 +113,7 @@ def import_transactions(
         description_column=description_column,
         amount_column=amount_column,
         date_format=date_format,
-        signed_amounts=signed_amounts,
+        amount_convention=amount_convention,
     )
     account = db.get(Account, account_id)
     if account is None or account.user_id != user.id:
@@ -126,8 +129,24 @@ def import_transactions(
     if missing:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"Colunas não encontradas no CSV: {', '.join(sorted(missing))}",
+            f"Colunas não encontradas no CSV: {', '.join(sorted(missing))}. "
+            f"Colunas disponíveis: {', '.join(reader.fieldnames)}",
         )
+
+    # Quantas vezes cada (data, descrição, valor, tipo) já foi lançada nessa conta,
+    # pra não duplicar quando extratos se sobrepõem (ex: fatura mensal + extrato
+    # consolidado cobrindo o mesmo período). Usa contagem, não presença: duas
+    # transações genuinamente iguais no mesmo dia (ex: dois Pix idênticos de R$3
+    # para o mesmo destinatário) não podem virar uma só.
+    existing_counts: Counter[tuple] = Counter(
+        (t.date, t.description, t.amount, t.kind)
+        for t in db.scalars(
+            select(Transaction).where(
+                Transaction.user_id == user.id, Transaction.account_id == account_id
+            )
+        )
+    )
+    seen_counts: Counter[tuple] = Counter()
 
     batch = ImportBatch(
         user_id=user.id, filename=file.filename or "extrato.csv", status=ImportStatus.processing
@@ -136,33 +155,32 @@ def import_transactions(
     db.flush()
 
     row_count = 0
+    skipped_duplicates = 0
+    errors: list[str] = []
+
     for row_number, row in enumerate(reader, start=2):
-        raw_date = row[mapping.date_column].strip()
-        raw_amount = row[mapping.amount_column].strip().replace(".", "").replace(",", ".")
-        description = row[mapping.description_column].strip()
+        raw_date = (row.get(mapping.date_column) or "").strip()
+        raw_amount = (row.get(mapping.amount_column) or "").strip()
+        description = (row.get(mapping.description_column) or "").strip()
+
+        if not raw_date and not raw_amount and not description:
+            continue  # linha em branco (comum no fim de exports do Nubank)
 
         try:
-            parsed_date = datetime.strptime(raw_date, mapping.date_format).date()
-        except ValueError as exc:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"Data inválida na linha {row_number}: '{raw_date}'",
-            ) from exc
+            parsed_date = parse_date(raw_date, mapping.date_format)
+            parsed_amount = parse_amount(raw_amount)
+        except (ValueError, InvalidOperation) as exc:
+            errors.append(f"Linha {row_number}: {exc}")
+            continue
 
-        try:
-            parsed_amount = Decimal(raw_amount)
-        except InvalidOperation as exc:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"Valor inválido na linha {row_number}: '{raw_amount}'",
-            ) from exc
+        amount, kind_value = apply_amount_convention(parsed_amount, mapping.amount_convention)
+        kind = TransactionKind(kind_value)
 
-        if mapping.signed_amounts:
-            kind = TransactionKind.income if parsed_amount >= 0 else TransactionKind.expense
-            amount = abs(parsed_amount)
-        else:
-            kind = TransactionKind.expense
-            amount = abs(parsed_amount)
+        key = (parsed_date, description, amount, kind)
+        seen_counts[key] += 1
+        if seen_counts[key] <= existing_counts[key]:
+            skipped_duplicates += 1
+            continue
 
         db.add(
             Transaction(
@@ -182,4 +200,10 @@ def import_transactions(
     batch.status = ImportStatus.done
     db.commit()
 
-    return ImportResult(import_id=batch.id, row_count=row_count, status=batch.status)
+    return ImportResult(
+        import_id=batch.id,
+        row_count=row_count,
+        skipped_duplicates=skipped_duplicates,
+        errors=errors,
+        status=batch.status,
+    )
