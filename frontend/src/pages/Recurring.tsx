@@ -29,7 +29,6 @@ export default function Recurring() {
   const [ruleWeekday, setRuleWeekday] = useState('0')
   const [ruleStartDate, setRuleStartDate] = useState(today())
   const [ruleError, setRuleError] = useState<string | null>(null)
-  const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
 
   const [instAccountId, setInstAccountId] = useState<number | ''>('')
   const [instCategoryId, setInstCategoryId] = useState<number | ''>('')
@@ -38,7 +37,6 @@ export default function Recurring() {
   const [instCount, setInstCount] = useState('12')
   const [instStartDate, setInstStartDate] = useState(today())
   const [instError, setInstError] = useState<string | null>(null)
-  const [editingInstallmentId, setEditingInstallmentId] = useState<number | null>(null)
 
   function reload() {
     recurringApi.list().then(setRules)
@@ -65,7 +63,7 @@ export default function Recurring() {
       setRuleError('Preencha conta, descrição e um valor maior que zero.')
       return
     }
-    const payload = {
+    await recurringApi.create({
       account_id: ruleAccountId,
       category_id: ruleCategoryId === '' ? null : ruleCategoryId,
       description: ruleDescription,
@@ -75,36 +73,33 @@ export default function Recurring() {
       day_of_month: ruleFrequency === 'monthly' ? Number(ruleDayOfMonth) : null,
       weekday: ruleFrequency === 'weekly' ? Number(ruleWeekday) : null,
       start_date: ruleStartDate,
-    }
-    if (editingRuleId !== null) {
-      await recurringApi.update(editingRuleId, payload)
-      setEditingRuleId(null)
-    } else {
-      await recurringApi.create(payload)
-    }
+    })
     setRuleDescription('')
     setRuleAmount('')
     reload()
   }
 
-  function startEditRule(rule: RecurringRule) {
-    setEditingRuleId(rule.id)
-    setRuleAccountId(rule.account_id)
-    setRuleCategoryId(rule.category_id ?? '')
-    setRuleDescription(rule.description)
-    setRuleAmount(rule.amount)
-    setRuleKind(rule.kind)
-    setRuleFrequency(rule.frequency)
-    setRuleDayOfMonth(String(rule.day_of_month ?? 5))
-    setRuleWeekday(String(rule.weekday ?? 0))
-    setRuleStartDate(rule.start_date)
-    setRuleError(null)
+  async function patchRule(rule: RecurringRule, patch: Record<string, unknown>) {
+    await recurringApi.update(rule.id, patch)
+    reload()
   }
 
-  function cancelEditRule() {
-    setEditingRuleId(null)
-    setRuleDescription('')
-    setRuleAmount('')
+  function handleRuleDescriptionBlur(rule: RecurringRule, value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === rule.description) return
+    patchRule(rule, { description: trimmed })
+  }
+
+  function handleRuleAmountBlur(rule: RecurringRule, value: string) {
+    const parsed = Number(value.replace(',', '.'))
+    if (!parsed || parsed <= 0) return
+    patchRule(rule, { amount: parsed })
+  }
+
+  function handleRuleDayBlur(rule: RecurringRule, value: string) {
+    const parsed = Number(value)
+    if (!parsed || parsed < 1 || parsed > 31) return
+    patchRule(rule, { day_of_month: parsed })
   }
 
   async function handleCreateInstallment(event: FormEvent) {
@@ -116,47 +111,29 @@ export default function Recurring() {
       setInstError('Preencha conta, descrição, valor total e número de parcelas.')
       return
     }
-    if (editingInstallmentId !== null) {
-      await installmentsApi.update(editingInstallmentId, {
-        account_id: instAccountId,
-        category_id: instCategoryId === '' ? null : instCategoryId,
-        description: instDescription,
-        start_date: instStartDate,
-      })
-      setEditingInstallmentId(null)
-    } else {
-      await installmentsApi.create({
-        account_id: instAccountId,
-        category_id: instCategoryId === '' ? null : instCategoryId,
-        description: instDescription,
-        total_amount: parsedTotal,
-        installment_count: parsedCount,
-        start_date: instStartDate,
-      })
-    }
+    await installmentsApi.create({
+      account_id: instAccountId,
+      category_id: instCategoryId === '' ? null : instCategoryId,
+      description: instDescription,
+      total_amount: parsedTotal,
+      installment_count: parsedCount,
+      start_date: instStartDate,
+    })
     setInstDescription('')
     setInstTotal('')
     reload()
   }
 
-  function startEditInstallment(inst: Installment) {
-    setEditingInstallmentId(inst.id)
-    setInstAccountId(inst.account_id)
-    setInstCategoryId(inst.category_id ?? '')
-    setInstDescription(inst.description)
-    setInstTotal(inst.total_amount)
-    setInstCount(String(inst.installment_count))
-    setInstStartDate(inst.start_date)
-    setInstError(null)
+  async function patchInstallment(inst: Installment, patch: Record<string, unknown>) {
+    await installmentsApi.update(inst.id, patch)
+    reload()
   }
 
-  function cancelEditInstallment() {
-    setEditingInstallmentId(null)
-    setInstDescription('')
-    setInstTotal('')
+  function handleInstallmentDescriptionBlur(inst: Installment, value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === inst.description) return
+    patchInstallment(inst, { description: trimmed })
   }
-
-  const accountName = (id: number) => accounts.find((a) => a.id === id)?.name ?? '—'
 
   return (
     <div>
@@ -165,7 +142,7 @@ export default function Recurring() {
       </div>
 
       <div className="card">
-        <h2>{editingRuleId !== null ? 'Editar conta fixa' : 'Conta fixa mensal ou semanal'}</h2>
+        <h2>Conta fixa mensal ou semanal</h2>
         <form onSubmit={handleCreateRule}>
           <div className="form-row">
             <label className="field">
@@ -244,13 +221,8 @@ export default function Recurring() {
               <input type="date" value={ruleStartDate} onChange={(e) => setRuleStartDate(e.target.value)} />
             </label>
             <button className="btn" type="submit">
-              {editingRuleId !== null ? 'Salvar edição' : 'Salvar'}
+              Salvar
             </button>
-            {editingRuleId !== null && (
-              <button className="btn-ghost" type="button" onClick={cancelEditRule}>
-                Cancelar
-              </button>
-            )}
           </div>
         </form>
         {ruleError && <p className="auth-error" style={{ marginTop: 10 }}>{ruleError}</p>}
@@ -258,46 +230,113 @@ export default function Recurring() {
         {rules.length === 0 ? (
           <p className="empty-hint" style={{ marginTop: 14 }}>Nenhuma conta fixa cadastrada ainda.</p>
         ) : (
-          <table className="data-table" style={{ marginTop: 14 }}>
-            <thead>
-              <tr>
-                <th>Descrição</th>
-                <th>Conta</th>
-                <th>Valor</th>
-                <th>Frequência</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rules.map((rule) => (
-                <tr key={rule.id}>
-                  <td>{rule.description}</td>
-                  <td>{accountName(rule.account_id)}</td>
-                  <td className={rule.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
-                    {formatCurrency(rule.amount)}
-                  </td>
-                  <td>
-                    {rule.frequency === 'monthly'
-                      ? `Todo dia ${rule.day_of_month}`
-                      : WEEKDAY_LABELS[rule.weekday ?? 0]}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => startEditRule(rule)}>
-                      editar
-                    </button>{' '}
-                    <button className="btn-danger" onClick={() => recurringApi.remove(rule.id).then(reload)}>
-                      remover
-                    </button>
-                  </td>
+          <div className="tablewrap">
+            <table className="data-table data-table-editable" style={{ marginTop: 14 }}>
+              <thead>
+                <tr>
+                  <th>Descrição</th>
+                  <th>Conta</th>
+                  <th>Categoria</th>
+                  <th>Valor</th>
+                  <th>Frequência</th>
+                  <th>Dia</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rules.map((rule) => (
+                  <tr key={rule.id}>
+                    <td>
+                      <input
+                        key={`rule-desc-${rule.id}-${rule.description}`}
+                        defaultValue={rule.description}
+                        onBlur={(e) => handleRuleDescriptionBlur(rule, e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={rule.account_id}
+                        onChange={(e) => patchRule(rule, { account_id: Number(e.target.value) })}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={rule.category_id ?? ''}
+                        onChange={(e) =>
+                          patchRule(rule, { category_id: e.target.value ? Number(e.target.value) : null })
+                        }
+                      >
+                        <option value="">Sem categoria</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className={rule.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
+                      <input
+                        key={`rule-amount-${rule.id}-${rule.amount}`}
+                        defaultValue={rule.amount}
+                        onBlur={(e) => handleRuleAmountBlur(rule, e.target.value)}
+                        inputMode="decimal"
+                        style={{ width: 80 }}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={rule.frequency}
+                        onChange={(e) => patchRule(rule, { frequency: e.target.value })}
+                      >
+                        <option value="monthly">Mensal</option>
+                        <option value="weekly">Semanal</option>
+                      </select>
+                    </td>
+                    <td>
+                      {rule.frequency === 'monthly' ? (
+                        <input
+                          key={`rule-day-${rule.id}-${rule.day_of_month}`}
+                          type="number"
+                          min={1}
+                          max={31}
+                          defaultValue={rule.day_of_month ?? 5}
+                          onBlur={(e) => handleRuleDayBlur(rule, e.target.value)}
+                          style={{ width: 56 }}
+                        />
+                      ) : (
+                        <select
+                          value={rule.weekday ?? 0}
+                          onChange={(e) => patchRule(rule, { weekday: Number(e.target.value) })}
+                        >
+                          {WEEKDAY_LABELS.map((label, index) => (
+                            <option key={label} value={index}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button className="btn-danger" onClick={() => recurringApi.remove(rule.id).then(reload)}>
+                        remover
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       <div className="card">
-        <h2>{editingInstallmentId !== null ? 'Editar parcelamento' : 'Compra parcelada'}</h2>
+        <h2>Compra parcelada</h2>
         <form onSubmit={handleCreateInstallment}>
           <div className="form-row">
             <label className="field">
@@ -337,7 +376,6 @@ export default function Recurring() {
                 onChange={(e) => setInstTotal(e.target.value)}
                 placeholder="3000,00"
                 inputMode="decimal"
-                disabled={editingInstallmentId !== null}
               />
             </label>
             <label className="field">
@@ -348,7 +386,6 @@ export default function Recurring() {
                 max={120}
                 value={instCount}
                 onChange={(e) => setInstCount(e.target.value)}
-                disabled={editingInstallmentId !== null}
               />
             </label>
             <label className="field">
@@ -356,57 +393,90 @@ export default function Recurring() {
               <input type="date" value={instStartDate} onChange={(e) => setInstStartDate(e.target.value)} />
             </label>
             <button className="btn" type="submit">
-              {editingInstallmentId !== null ? 'Salvar edição' : 'Salvar'}
+              Salvar
             </button>
-            {editingInstallmentId !== null && (
-              <button className="btn-ghost" type="button" onClick={cancelEditInstallment}>
-                Cancelar
-              </button>
-            )}
           </div>
         </form>
-        {editingInstallmentId !== null && (
-          <p className="empty-hint" style={{ marginTop: -6, marginBottom: 10 }}>
-            Valor total e número de parcelas não podem ser alterados depois de criado — remova e cadastre de novo se precisar mudar isso.
-          </p>
-        )}
         {instError && <p className="auth-error" style={{ marginTop: 10 }}>{instError}</p>}
 
         {installments.length === 0 ? (
           <p className="empty-hint" style={{ marginTop: 14 }}>Nenhum parcelamento cadastrado ainda.</p>
         ) : (
-          <table className="data-table" style={{ marginTop: 14 }}>
-            <thead>
-              <tr>
-                <th>Descrição</th>
-                <th>Conta</th>
-                <th>Parcela</th>
-                <th>Total</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {installments.map((inst) => (
-                <tr key={inst.id}>
-                  <td>{inst.description}</td>
-                  <td>{accountName(inst.account_id)}</td>
-                  <td className="amount-expense">
-                    {formatCurrency(inst.installment_amount)} × {inst.installment_count}
-                  </td>
-                  <td>{formatCurrency(inst.total_amount)}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => startEditInstallment(inst)}>
-                      editar
-                    </button>{' '}
-                    <button className="btn-danger" onClick={() => installmentsApi.remove(inst.id).then(reload)}>
-                      remover
-                    </button>
-                  </td>
+          <div className="tablewrap">
+            <table className="data-table data-table-editable" style={{ marginTop: 14 }}>
+              <thead>
+                <tr>
+                  <th>Descrição</th>
+                  <th>Conta</th>
+                  <th>Categoria</th>
+                  <th>Parcela</th>
+                  <th>Total</th>
+                  <th>1ª parcela</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {installments.map((inst) => (
+                  <tr key={inst.id}>
+                    <td>
+                      <input
+                        key={`inst-desc-${inst.id}-${inst.description}`}
+                        defaultValue={inst.description}
+                        onBlur={(e) => handleInstallmentDescriptionBlur(inst, e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={inst.account_id}
+                        onChange={(e) => patchInstallment(inst, { account_id: Number(e.target.value) })}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={inst.category_id ?? ''}
+                        onChange={(e) =>
+                          patchInstallment(inst, { category_id: e.target.value ? Number(e.target.value) : null })
+                        }
+                      >
+                        <option value="">Sem categoria</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="amount-expense">
+                      {formatCurrency(inst.installment_amount)} × {inst.installment_count}
+                    </td>
+                    <td>{formatCurrency(inst.total_amount)}</td>
+                    <td>
+                      <input
+                        type="date"
+                        value={inst.start_date}
+                        onChange={(e) => patchInstallment(inst, { start_date: e.target.value })}
+                      />
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button className="btn-danger" onClick={() => installmentsApi.remove(inst.id).then(reload)}>
+                        remover
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
+        <p className="empty-hint" style={{ marginTop: 10 }}>
+          Valor total e número de parcelas não podem ser alterados depois de criado — remova e cadastre de novo se precisar mudar isso.
+        </p>
       </div>
     </div>
   )

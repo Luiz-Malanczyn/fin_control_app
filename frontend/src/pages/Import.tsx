@@ -10,6 +10,7 @@ export default function Import() {
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set())
 
   const [dateColumn, setDateColumn] = useState('')
   const [descriptionColumn, setDescriptionColumn] = useState('')
@@ -33,6 +34,7 @@ export default function Import() {
     try {
       const data = await importApi.detect(targetFile, overrides)
       setPreview(data)
+      setExcludedIndices(new Set())
       setDateColumn(data.mapping.date_column)
       setDescriptionColumn(data.mapping.description_column)
       setAmountColumn(data.mapping.amount_column)
@@ -51,7 +53,24 @@ export default function Import() {
     setFile(newFile)
     setPreview(null)
     setResult(null)
+    setExcludedIndices(new Set())
     if (newFile) runDetect(newFile)
+  }
+
+  function toggleRow(index: number) {
+    setExcludedIndices((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (!preview) return
+    setExcludedIndices((prev) =>
+      prev.size === 0 ? new Set(preview.rows.map((r) => r.index)) : new Set(),
+    )
   }
 
   function refreshWithOverrides(next: Partial<{ date_column: string; description_column: string; amount_column: string; date_format: string; amount_convention: string }>) {
@@ -71,13 +90,18 @@ export default function Import() {
     setCommitting(true)
     setError(null)
     try {
-      const data = await importApi.commit(accountId, file, {
-        date_column: dateColumn,
-        description_column: descriptionColumn,
-        amount_column: amountColumn,
-        date_format: dateFormat,
-        amount_convention: amountConvention,
-      })
+      const data = await importApi.commit(
+        accountId,
+        file,
+        {
+          date_column: dateColumn,
+          description_column: descriptionColumn,
+          amount_column: amountColumn,
+          date_format: dateFormat,
+          amount_convention: amountConvention,
+        },
+        Array.from(excludedIndices),
+      )
       setResult(data)
     } catch (err) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -182,7 +206,7 @@ export default function Import() {
               </select>
             </label>
             <p className="empty-hint" style={{ alignSelf: 'end', paddingBottom: 8 }}>
-              {preview.row_count} lançamento(s) encontrados
+              {preview.row_count - excludedIndices.size} de {preview.row_count} lançamento(s) serão importados
               {preview.errors.length > 0 ? `, ${preview.errors.length} linha(s) com erro` : ''}.
             </p>
           </div>
@@ -191,14 +215,29 @@ export default function Import() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={excludedIndices.size === 0}
+                      onChange={toggleAll}
+                      title="Selecionar/desmarcar todos"
+                    />
+                  </th>
                   <th>Data</th>
                   <th>Descrição</th>
                   <th>Valor</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.rows.map((row, i) => (
-                  <tr key={i}>
+                {preview.rows.map((row) => (
+                  <tr key={row.index} className={excludedIndices.has(row.index) ? 'row-excluded' : undefined}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={!excludedIndices.has(row.index)}
+                        onChange={() => toggleRow(row.index)}
+                      />
+                    </td>
                     <td>{row.date.split('-').reverse().join('/')}</td>
                     <td>{row.description}</td>
                     <td className={row.kind === 'expense' ? 'amount-expense' : 'amount-income'}>

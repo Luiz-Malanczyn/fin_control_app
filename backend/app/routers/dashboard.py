@@ -14,12 +14,22 @@ from app.models import (
     Installment,
     RecurringRule,
     Transaction,
+    TransactionGroup,
     TransactionKind,
     TransactionSource,
     User,
 )
 from app.recurrence import occurrences_for_installment, occurrences_for_rule
-from app.schemas import CalendarItem, CategorySummary, ForecastOut, MarkPaidRequest, SummaryOut, TransactionOut
+from app.schemas import (
+    CalendarItem,
+    CategorySummary,
+    ForecastOut,
+    GroupSummary,
+    MarkPaidRequest,
+    PeriodTotal,
+    SummaryOut,
+    TransactionOut,
+)
 from app.spending import household_items_in_range
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -30,6 +40,20 @@ def _month_bounds(today: date) -> tuple[date, date]:
     last_day = calendar_module.monthrange(today.year, today.month)[1]
     end = today.replace(day=last_day)
     return start, end
+
+
+def _fixed_periods(today: date) -> list[tuple[str, date, date]]:
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    month_start, month_end = _month_bounds(today)
+    year_start = today.replace(month=1, day=1)
+    year_end = today.replace(month=12, day=31)
+    return [
+        ("Hoje", today, today),
+        ("Semana", week_start, week_end),
+        ("Mês", month_start, month_end),
+        ("Ano", year_start, year_end),
+    ]
 
 
 @router.get("/calendar", response_model=list[CalendarItem])
@@ -208,20 +232,21 @@ def mark_paid(
 def summary(
     date_from: date = Query(...),
     date_to: date = Query(...),
+    account_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SummaryOut:
     # Transações reais + ocorrências de recorrência/parcela dentro do período
     # que ainda não viraram transação (contas fixas aparecem no gráfico
     # mesmo sem o cron ter rodado nelas, sem contar 2x quando ele rodar).
-    items = household_items_in_range(db, user.household_id, date_from, date_to)
+    items = household_items_in_range(db, user.household_id, date_from, date_to, account_id=account_id)
 
-    total_income = sum((amount for amount, kind, _ in items if kind == TransactionKind.income), Decimal(0))
-    total_expense = sum((amount for amount, kind, _ in items if kind == TransactionKind.expense), Decimal(0))
+    total_income = sum((amount for amount, kind, _, _ in items if kind == TransactionKind.income), Decimal(0))
+    total_expense = sum((amount for amount, kind, _, _ in items if kind == TransactionKind.expense), Decimal(0))
 
     categories = {c.id: c.name for c in db.scalars(select(Category).where(Category.household_id == user.household_id))}
     totals_by_category: dict[int | None, Decimal] = {}
-    for amount, kind, category_id in items:
+    for amount, kind, category_id, _group_id in items:
         if kind != TransactionKind.expense:
             continue
         totals_by_category[category_id] = totals_by_category.get(category_id, Decimal(0)) + amount
@@ -235,12 +260,43 @@ def summary(
         for cid, total in sorted(totals_by_category.items(), key=lambda kv: kv[1], reverse=True)
     ]
 
+    groups = {g.id: g.name for g in db.scalars(select(TransactionGroup).where(TransactionGroup.household_id == user.household_id))}
+    totals_by_group: dict[int | None, Decimal] = {}
+    for amount, kind, _category_id, group_id in items:
+        if kind != TransactionKind.expense or group_id is None:
+            continue
+        totals_by_group[group_id] = totals_by_group.get(group_id, Decimal(0)) + amount
+
+    by_group = [
+        GroupSummary(
+            group_id=gid,
+            group_name=groups.get(gid, "Sem grupo"),
+            total=total,
+        )
+        for gid, total in sorted(totals_by_group.items(), key=lambda kv: kv[1], reverse=True)
+    ]
+
+    periods = []
+    for label, period_start, period_end in _fixed_periods(date.today()):
+        period_items = household_items_in_range(db, user.household_id, period_start, period_end, account_id=account_id)
+        periods.append(
+            PeriodTotal(
+                label=label,
+                period_start=period_start,
+                period_end=period_end,
+                total_income=sum((a for a, k, _, _ in period_items if k == TransactionKind.income), Decimal(0)),
+                total_expense=sum((a for a, k, _, _ in period_items if k == TransactionKind.expense), Decimal(0)),
+            )
+        )
+
     return SummaryOut(
         period_start=date_from,
         period_end=date_to,
         total_income=total_income,
         total_expense=total_expense,
         by_category=by_category,
+        by_group=by_group,
+        periods=periods,
     )
 
 

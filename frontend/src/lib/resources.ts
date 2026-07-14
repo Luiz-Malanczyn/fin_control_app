@@ -103,6 +103,7 @@ export type CsvMapping = {
 }
 
 export type ImportPreviewRow = {
+  index: number
   date: string
   description: string
   amount: string
@@ -137,12 +138,16 @@ export const importApi = {
       })
       .then((r) => r.data)
   },
-  commit: (accountId: number, file: File, mapping: CsvMapping) => {
+  commit: (accountId: number, file: File, mapping: CsvMapping, excludedIndices?: number[]) => {
     const form = new FormData()
     form.append('file', file)
     return api
       .post<ImportResult>('/transactions/import', form, {
-        params: { account_id: accountId, ...mapping },
+        params: {
+          account_id: accountId,
+          ...mapping,
+          excluded_indices: excludedIndices && excludedIndices.length > 0 ? excludedIndices.join(',') : undefined,
+        },
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       .then((r) => r.data)
@@ -169,9 +174,11 @@ export const installmentsApi = {
 
 export const dashboardApi = {
   forecast: () => api.get<ForecastOut>('/dashboard/forecast').then((r) => r.data),
-  summary: (dateFrom: string, dateTo: string) =>
+  summary: (dateFrom: string, dateTo: string, accountId?: number) =>
     api
-      .get<SummaryOut>('/dashboard/summary', { params: { date_from: dateFrom, date_to: dateTo } })
+      .get<SummaryOut>('/dashboard/summary', {
+        params: { date_from: dateFrom, date_to: dateTo, account_id: accountId },
+      })
       .then((r) => r.data),
   calendar: (dateFrom: string, dateTo: string) =>
     api

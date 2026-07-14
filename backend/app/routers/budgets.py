@@ -20,7 +20,7 @@ def _spent_by_category_this_month(db: Session, household_id: int) -> dict[int | 
     month_start, month_end = _month_bounds(today)
     items = household_items_in_range(db, household_id, month_start, month_end)
     totals: dict[int | None, Decimal] = {}
-    for amount, kind, category_id in items:
+    for amount, kind, category_id, _group_id in items:
         if kind != TransactionKind.expense:
             continue
         totals[category_id] = totals.get(category_id, Decimal(0)) + amount

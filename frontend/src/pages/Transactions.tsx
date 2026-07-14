@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { accountsApi, categoriesApi, groupsApi, householdApi, transactionsApi } from '../lib/resources'
 import {
-  formatCurrency,
   type Account,
   type Category,
   type HouseholdMember,
@@ -17,6 +16,17 @@ function firstDayOfMonth(): string {
 function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
+
+type TransactionPatch = Partial<{
+  account_id: number
+  category_id: number | null
+  group_id: number | null
+  date: string
+  description: string
+  amount: number
+  kind: string
+  paid: boolean
+}>
 
 export default function Transactions() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -36,7 +46,6 @@ export default function Transactions() {
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState<'expense' | 'income'>('expense')
   const [formError, setFormError] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<number | null>(null)
 
   function reloadTransactions() {
     transactionsApi.list({ date_from: dateFrom, date_to: dateTo }).then(setTransactions)
@@ -56,24 +65,6 @@ export default function Transactions() {
 
   useEffect(reloadTransactions, [dateFrom, dateTo])
 
-  function startEdit(t: Transaction) {
-    setEditingId(t.id)
-    setAccountId(t.account_id)
-    setCategoryId(t.category_id ?? '')
-    setGroupId(t.group_id ?? '')
-    setDate(t.date)
-    setDescription(t.description)
-    setAmount(t.amount)
-    setKind(t.kind)
-    setFormError(null)
-  }
-
-  function cancelEdit() {
-    setEditingId(null)
-    setDescription('')
-    setAmount('')
-  }
-
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setFormError(null)
@@ -86,7 +77,7 @@ export default function Transactions() {
       setFormError('Preencha descrição e um valor maior que zero.')
       return
     }
-    const payload = {
+    await transactionsApi.create({
       account_id: accountId,
       category_id: categoryId === '' ? null : categoryId,
       group_id: groupId === '' ? null : groupId,
@@ -94,24 +85,27 @@ export default function Transactions() {
       description,
       amount: parsedAmount,
       kind,
-    }
-    if (editingId !== null) {
-      await transactionsApi.update(editingId, payload)
-      setEditingId(null)
-    } else {
-      await transactionsApi.create(payload)
-    }
+    })
     setDescription('')
     setAmount('')
     reloadTransactions()
   }
 
-  const categoryName = (id: number | null) => categories.find((c) => c.id === id)?.name ?? '—'
-  const accountName = (id: number) => accounts.find((a) => a.id === id)?.name ?? '—'
-
-  async function togglePaid(t: Transaction) {
-    await transactionsApi.update(t.id, { paid: !t.paid })
+  async function patchTransaction(t: Transaction, patch: TransactionPatch) {
+    await transactionsApi.update(t.id, patch)
     reloadTransactions()
+  }
+
+  function handleDescriptionBlur(t: Transaction, value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === t.description) return
+    patchTransaction(t, { description: trimmed })
+  }
+
+  function handleAmountBlur(t: Transaction, value: string) {
+    const parsed = Number(value.replace(',', '.'))
+    if (!parsed || parsed <= 0) return
+    patchTransaction(t, { amount: parsed })
   }
 
   return (
@@ -121,7 +115,7 @@ export default function Transactions() {
       </div>
 
       <div className="card">
-        <h2>{editingId !== null ? 'Editar lançamento' : 'Novo lançamento'}</h2>
+        <h2>Novo lançamento</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-row">
             <label className="field">
@@ -178,13 +172,8 @@ export default function Transactions() {
               <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="150,00" inputMode="decimal" />
             </label>
             <button className="btn" type="submit">
-              {editingId !== null ? 'Salvar edição' : 'Lançar'}
+              Lançar
             </button>
-            {editingId !== null && (
-              <button className="btn-ghost" type="button" onClick={cancelEdit}>
-                Cancelar
-              </button>
-            )}
           </div>
         </form>
         {formError && <p className="auth-error" style={{ marginTop: 10 }}>{formError}</p>}
@@ -192,6 +181,9 @@ export default function Transactions() {
 
       <div className="card">
         <h2>Lançamentos</h2>
+        <p className="empty-hint" style={{ marginTop: -8, marginBottom: 12 }}>
+          Clique em qualquer campo da linha pra editar direto.
+        </p>
         <div className="form-row" style={{ marginBottom: 14 }}>
           <label className="field">
             De
@@ -206,47 +198,104 @@ export default function Transactions() {
         {transactions.length === 0 ? (
           <p className="empty-hint">Nenhuma transação no período selecionado.</p>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Conta</th>
-                <th>Categoria</th>
-                {members.length > 1 && <th>Lançado por</th>}
-                <th>Valor</th>
-                <th>Pago</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.date.split('-').reverse().join('/')}</td>
-                  <td>{t.description}</td>
-                  <td>{accountName(t.account_id)}</td>
-                  <td>{categoryName(t.category_id)}</td>
-                  {members.length > 1 && (
-                    <td>{members.find((m) => m.id === t.user_id)?.name ?? '—'}</td>
-                  )}
-                  <td className={t.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
-                    {t.kind === 'expense' ? '-' : '+'} {formatCurrency(t.amount)}
-                  </td>
-                  <td>
-                    <input type="checkbox" checked={t.paid} onChange={() => togglePaid(t)} />
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => startEdit(t)}>
-                      editar
-                    </button>{' '}
-                    <button className="btn-danger" onClick={() => transactionsApi.remove(t.id).then(reloadTransactions)}>
-                      remover
-                    </button>
-                  </td>
+          <div className="tablewrap">
+            <table className="data-table data-table-editable">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Conta</th>
+                  <th>Categoria</th>
+                  <th>Tipo</th>
+                  {members.length > 1 && <th>Lançado por</th>}
+                  <th>Valor</th>
+                  <th>Pago</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {transactions.map((t) => (
+                  <tr key={t.id}>
+                    <td>
+                      <input
+                        type="date"
+                        value={t.date}
+                        onChange={(e) => patchTransaction(t, { date: e.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        key={`desc-${t.id}-${t.description}`}
+                        defaultValue={t.description}
+                        onBlur={(e) => handleDescriptionBlur(t, e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={t.account_id}
+                        onChange={(e) => patchTransaction(t, { account_id: Number(e.target.value) })}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={t.category_id ?? ''}
+                        onChange={(e) =>
+                          patchTransaction(t, { category_id: e.target.value ? Number(e.target.value) : null })
+                        }
+                      >
+                        <option value="">Sem categoria</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select value={t.kind} onChange={(e) => patchTransaction(t, { kind: e.target.value })}>
+                        <option value="expense">Gasto</option>
+                        <option value="income">Receita</option>
+                      </select>
+                    </td>
+                    {members.length > 1 && (
+                      <td>{members.find((m) => m.id === t.user_id)?.name ?? '—'}</td>
+                    )}
+                    <td className={t.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
+                      <input
+                        key={`amount-${t.id}-${t.amount}`}
+                        defaultValue={t.amount}
+                        onBlur={(e) => handleAmountBlur(t, e.target.value)}
+                        inputMode="decimal"
+                        style={{ width: 90 }}
+                      />
+                    </td>
+                    <td>
+                      {t.kind === 'expense' ? (
+                        <input
+                          type="checkbox"
+                          checked={t.paid}
+                          onChange={() => patchTransaction(t, { paid: !t.paid })}
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button className="btn-danger" onClick={() => transactionsApi.remove(t.id).then(reloadTransactions)}>
+                        remover
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

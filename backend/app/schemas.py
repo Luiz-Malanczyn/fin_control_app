@@ -216,6 +216,7 @@ class ImportResult(BaseModel):
 
 
 class ImportPreviewRow(BaseModel):
+    index: int
     date: date
     description: str
     amount: Decimal
@@ -337,12 +338,28 @@ class CategorySummary(BaseModel):
     total: Decimal
 
 
+class GroupSummary(BaseModel):
+    group_id: int | None
+    group_name: str
+    total: Decimal
+
+
+class PeriodTotal(BaseModel):
+    label: str
+    period_start: date
+    period_end: date
+    total_income: Decimal
+    total_expense: Decimal
+
+
 class SummaryOut(BaseModel):
     period_start: date
     period_end: date
     total_income: Decimal
     total_expense: Decimal
     by_category: list[CategorySummary]
+    by_group: list[GroupSummary]
+    periods: list[PeriodTotal]
 
 
 class ForecastOut(BaseModel):

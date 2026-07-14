@@ -27,7 +27,9 @@ from app.schemas import (
 
 router = APIRouter(prefix="/transactions/import", tags=["imports"])
 
-_PREVIEW_LIMIT = 30
+# Extratos pessoais raramente passam disso; manter tudo numa página só evita
+# ter que paginar a seleção de linhas a excluir antes de importar.
+_PREVIEW_LIMIT = 500
 
 
 def _is_pdf(filename: str | None, content_type: str | None) -> bool:
@@ -108,10 +110,12 @@ def _build_preview_rows(
     raw_rows: list[tuple[date, str, Decimal]], convention: AmountConvention
 ) -> list[ImportPreviewRow]:
     preview = []
-    for parsed_date, description, signed_amount in raw_rows[:_PREVIEW_LIMIT]:
+    for index, (parsed_date, description, signed_amount) in enumerate(raw_rows[:_PREVIEW_LIMIT]):
         amount, kind_value = apply_amount_convention(signed_amount, convention)
         preview.append(
-            ImportPreviewRow(date=parsed_date, description=description, amount=amount, kind=TransactionKind(kind_value))
+            ImportPreviewRow(
+                index=index, date=parsed_date, description=description, amount=amount, kind=TransactionKind(kind_value)
+            )
         )
     return preview
 
@@ -125,6 +129,7 @@ def import_transactions(
     amount_column: str | None = Query(default=None),
     date_format: str | None = Query(default=None),
     amount_convention: AmountConvention = Query(default="income_positive"),
+    excluded_indices: str | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ImportResult:
@@ -148,7 +153,8 @@ def import_transactions(
         except CsvParseError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    return _commit_rows(db, user, account_id, file.filename, raw_rows, amount_convention, parse_errors)
+    excluded = {int(x) for x in excluded_indices.split(",") if x.strip()} if excluded_indices else set()
+    return _commit_rows(db, user, account_id, file.filename, raw_rows, amount_convention, parse_errors, excluded)
 
 
 def _commit_rows(
@@ -159,7 +165,9 @@ def _commit_rows(
     raw_rows: list[tuple[date, str, Decimal]],
     amount_convention: AmountConvention,
     parse_errors: list[str],
+    excluded_indices: set[int] | None = None,
 ) -> ImportResult:
+    excluded_indices = excluded_indices or set()
     # Quantas vezes cada (data, descrição, valor, tipo) já foi lançada nessa conta,
     # pra não duplicar quando extratos se sobrepõem (ex: fatura mensal + extrato
     # consolidado cobrindo o mesmo período). Usa contagem, não presença: duas
@@ -187,7 +195,9 @@ def _commit_rows(
     row_count = 0
     skipped_duplicates = 0
 
-    for parsed_date, description, signed_amount in raw_rows:
+    for index, (parsed_date, description, signed_amount) in enumerate(raw_rows):
+        if index in excluded_indices:
+            continue
         amount, kind_value = apply_amount_convention(signed_amount, amount_convention)
         kind = TransactionKind(kind_value)
 

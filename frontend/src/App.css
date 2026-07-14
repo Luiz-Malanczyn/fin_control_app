@@ -184,6 +184,44 @@ table.data-table {
   font-weight: 600;
 }
 
+.tablewrap {
+  overflow-x: auto;
+}
+
+.row-excluded {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.data-table-editable input,
+.data-table-editable select {
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 5px;
+  border-radius: 5px;
+  width: 100%;
+  min-width: 90px;
+}
+
+.data-table-editable input:hover,
+.data-table-editable select:hover {
+  border-color: var(--border);
+}
+
+.data-table-editable input:focus,
+.data-table-editable select:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--bg);
+}
+
+.data-table-editable td {
+  padding: 4px 6px;
+}
+
 .amount-expense {
   color: var(--expense);
 }
