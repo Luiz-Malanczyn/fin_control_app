@@ -1,0 +1,41 @@
+:root {
+  --bg: #f0efe9;
+  --bg-card: #ffffff;
+  --ink: #1b241f;
+  --ink-muted: #5b665e;
+  --accent: #1f6f5c;
+  --accent-soft: #dceae5;
+  --border: #dad7cd;
+
+  font: 16px/1.5 -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  color-scheme: light dark;
+  color: var(--ink);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121915;
+    --bg-card: #182019;
+    --ink: #e9e7dd;
+    --ink-muted: #9ca69e;
+    --accent: #56c1a3;
+    --accent-soft: rgba(86, 193, 163, 0.14);
+    --border: #2a342d;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1 {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+}
