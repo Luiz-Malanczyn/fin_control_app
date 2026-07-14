@@ -179,32 +179,44 @@ export default function Dashboard() {
         )}
       </div>
 
-      {summary && summary.periods.length > 0 && (
+      {summary && (
         <div className="card">
-          <h2 style={{ margin: '0 0 12px' }}>Totais por período</h2>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th></th>
-                <th>Receitas</th>
-                <th>Gastos</th>
-                <th>Saldo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.periods.map((p) => {
-                const net = Number(p.total_income) - Number(p.total_expense)
-                return (
-                  <tr key={p.label}>
-                    <td>{p.label}</td>
-                    <td className="amount-income">{formatCurrency(p.total_income)}</td>
-                    <td className="amount-expense">{formatCurrency(p.total_expense)}</td>
-                    <td className={net >= 0 ? 'amount-income' : 'amount-expense'}>{formatCurrency(net)}</td>
+          <h2 style={{ margin: '0 0 12px' }}>Lançamentos do período</h2>
+          <p className="empty-hint" style={{ marginTop: -8, marginBottom: 12 }}>
+            Mesmo filtro dos gráficos acima. Só visualização — pra editar, use a tela de Transações.
+          </p>
+          {summary.items.length === 0 ? (
+            <p className="empty-hint">Nenhum lançamento neste período.</p>
+          ) : (
+            <div className="tablewrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Conta</th>
+                    <th>Categoria</th>
+                    <th>Grupo</th>
+                    <th>Valor</th>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {summary.items.map((item, i) => (
+                    <tr key={i}>
+                      <td>{item.date.split('-').reverse().join('/')}</td>
+                      <td>{item.description}</td>
+                      <td>{item.account_name}</td>
+                      <td>{item.category_name}</td>
+                      <td>{item.group_name}</td>
+                      <td className={item.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
+                        {item.kind === 'expense' ? '-' : '+'} {formatCurrency(item.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

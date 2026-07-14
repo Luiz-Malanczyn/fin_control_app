@@ -112,12 +112,17 @@ export type GroupSummary = {
   total: string
 }
 
-export type PeriodTotal = {
-  label: string
-  period_start: string
-  period_end: string
-  total_income: string
-  total_expense: string
+export type SummaryItem = {
+  date: string
+  description: string
+  amount: string
+  kind: TransactionKind
+  account_id: number
+  account_name: string
+  category_id: number | null
+  category_name: string
+  group_id: number | null
+  group_name: string
 }
 
 export type SummaryOut = {
@@ -127,7 +132,7 @@ export type SummaryOut = {
   total_expense: string
   by_category: CategorySummary[]
   by_group: GroupSummary[]
-  periods: PeriodTotal[]
+  items: SummaryItem[]
 }
 
 export type ForecastOut = {

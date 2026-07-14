@@ -344,12 +344,17 @@ class GroupSummary(BaseModel):
     total: Decimal
 
 
-class PeriodTotal(BaseModel):
-    label: str
-    period_start: date
-    period_end: date
-    total_income: Decimal
-    total_expense: Decimal
+class SummaryItem(BaseModel):
+    date: date
+    description: str
+    amount: Decimal
+    kind: TransactionKind
+    account_id: int
+    account_name: str
+    category_id: int | None
+    category_name: str
+    group_id: int | None
+    group_name: str
 
 
 class SummaryOut(BaseModel):
@@ -359,7 +364,7 @@ class SummaryOut(BaseModel):
     total_expense: Decimal
     by_category: list[CategorySummary]
     by_group: list[GroupSummary]
-    periods: list[PeriodTotal]
+    items: list[SummaryItem]
 
 
 class ForecastOut(BaseModel):

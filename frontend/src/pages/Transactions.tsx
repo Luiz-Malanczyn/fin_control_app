@@ -206,6 +206,7 @@ export default function Transactions() {
                   <th>Descrição</th>
                   <th>Conta</th>
                   <th>Categoria</th>
+                  <th>Grupo</th>
                   <th>Tipo</th>
                   {members.length > 1 && <th>Lançado por</th>}
                   <th>Valor</th>
@@ -253,6 +254,21 @@ export default function Transactions() {
                         {categories.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={t.group_id ?? ''}
+                        onChange={(e) =>
+                          patchTransaction(t, { group_id: e.target.value ? Number(e.target.value) : null })
+                        }
+                      >
+                        <option value="">Sem grupo</option>
+                        {groups.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
                           </option>
                         ))}
                       </select>
