@@ -208,6 +208,7 @@ def _commit_rows(
                 kind=kind,
                 source=TransactionSource.import_,
                 import_batch_id=batch.id,
+                paid=True,
             )
         )
         row_count += 1

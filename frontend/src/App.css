@@ -255,6 +255,7 @@ table.data-table {
 
 .calendar-item {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 4px;
   font-size: 10.5px;
@@ -263,11 +264,30 @@ table.data-table {
   background: var(--accent-soft);
   color: var(--accent);
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
 
 .calendar-item.expense {
   background: var(--expense-soft);
   color: var(--expense);
+}
+
+.calendar-item.paid {
+  opacity: 0.5;
+}
+
+.calendar-item-check {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin: 0;
+}
+
+.calendar-item-desc {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .budget-bar-track {
@@ -297,7 +317,7 @@ table.data-table {
   .calendar-grid {
     grid-template-columns: repeat(7, minmax(0, 1fr));
   }
-  .calendar-item span:first-child {
+  .calendar-item-desc {
     display: none;
   }
 }

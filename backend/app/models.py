@@ -79,6 +79,8 @@ class Account(Base):
     # gastos passados pra estatística sem precisar reconciliar o saldo real.
     opening_balance: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     opening_balance_date: Mapped[date] = mapped_column(Date)
+    # Dia de vencimento da fatura, só relevante pra contas do tipo credit_card.
+    due_day: Mapped[int | None] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")
@@ -195,6 +197,10 @@ class Transaction(Base):
     amount: Mapped[float] = mapped_column(Numeric(12, 2))
     kind: Mapped[TransactionKind] = mapped_column(Enum(TransactionKind, native_enum=False))
     source: Mapped[TransactionSource] = mapped_column(Enum(TransactionSource, native_enum=False))
+    # Lançamentos manuais/importados nascem pagos (já aconteceram na vida
+    # real). Recorrência/parcela materializada pelo cron nasce não paga --
+    # o usuário confirma quando efetivamente pagar, tipo um checklist.
+    paid: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     account: Mapped["Account"] = relationship(back_populates="transactions")

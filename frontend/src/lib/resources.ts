@@ -29,10 +29,17 @@ export const accountsApi = {
     type: string
     opening_balance?: number
     opening_balance_date?: string
+    due_day?: number | null
   }) => api.post<Account>('/accounts', payload).then((r) => r.data),
   update: (
     id: number,
-    payload: Partial<{ name: string; type: string; opening_balance: number; opening_balance_date: string }>,
+    payload: Partial<{
+      name: string
+      type: string
+      opening_balance: number
+      opening_balance_date: string
+      due_day: number | null
+    }>,
   ) => api.patch<Account>(`/accounts/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/accounts/${id}`),
 }
@@ -79,6 +86,7 @@ export const transactionsApi = {
       description: string
       amount: number
       kind: string
+      paid: boolean
     }>,
   ) => api.patch<Transaction>(`/transactions/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/transactions/${id}`),
@@ -169,4 +177,12 @@ export const dashboardApi = {
     api
       .get<CalendarItem[]>('/dashboard/calendar', { params: { date_from: dateFrom, date_to: dateTo } })
       .then((r) => r.data),
+  markPaid: (payload: {
+    paid: boolean
+    transaction_id?: number | null
+    recurring_rule_id?: number | null
+    installment_id?: number | null
+    installment_number?: number | null
+    occurrence_date?: string | null
+  }) => api.post<Transaction>('/dashboard/mark-paid', payload).then((r) => r.data),
 }

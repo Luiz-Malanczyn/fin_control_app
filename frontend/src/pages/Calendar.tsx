@@ -24,11 +24,25 @@ export default function CalendarPage() {
   const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd })
 
-  useEffect(() => {
+  function reload() {
     dashboardApi
       .calendar(format(gridStart, 'yyyy-MM-dd'), format(gridEnd, 'yyyy-MM-dd'))
       .then(setItems)
-  }, [gridStart.getTime(), gridEnd.getTime()])
+  }
+
+  useEffect(reload, [gridStart.getTime(), gridEnd.getTime()])
+
+  async function togglePaid(item: CalendarItem) {
+    await dashboardApi.markPaid({
+      paid: !item.paid,
+      transaction_id: item.transaction_id,
+      recurring_rule_id: item.recurring_rule_id,
+      installment_id: item.installment_id,
+      installment_number: item.installment_number,
+      occurrence_date: item.date,
+    })
+    reload()
+  }
 
   const itemsByDay = useMemo(() => {
     const map = new Map<string, CalendarItem[]>()
@@ -56,6 +70,9 @@ export default function CalendarPage() {
           </button>
         </div>
       </div>
+      <p className="empty-hint" style={{ marginTop: -10, marginBottom: 16 }}>
+        Marque a caixinha quando pagar uma conta — não precisa esperar a data chegar.
+      </p>
 
       <div className="calendar-grid">
         {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((label) => (
@@ -78,10 +95,19 @@ export default function CalendarPage() {
               <span className="calendar-daynum">{format(day, 'd')}</span>
               <div className="calendar-items">
                 {dayItems.map((item, index) => (
-                  <div key={index} className={'calendar-item ' + item.kind}>
-                    <span>{item.description}</span>
+                  <label
+                    key={index}
+                    className={'calendar-item ' + item.kind + (item.paid ? ' paid' : '')}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={item.paid}
+                      onChange={() => togglePaid(item)}
+                      className="calendar-item-check"
+                    />
+                    <span className="calendar-item-desc">{item.description}</span>
                     <span>{formatCurrency(item.amount)}</span>
-                  </div>
+                  </label>
                 ))}
               </div>
             </div>

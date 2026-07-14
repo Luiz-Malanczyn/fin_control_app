@@ -2,7 +2,7 @@ import calendar as calendar_module
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,7 @@ from app.models import (
     User,
 )
 from app.recurrence import occurrences_for_installment, occurrences_for_rule
-from app.schemas import CalendarItem, CategorySummary, ForecastOut, SummaryOut
+from app.schemas import CalendarItem, CategorySummary, ForecastOut, MarkPaidRequest, SummaryOut, TransactionOut
 from app.spending import household_items_in_range
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -51,7 +51,18 @@ def calendar(
     posted_keys: set[tuple] = set()
     for t in posted:
         items.append(
-            CalendarItem(date=t.date, description=t.description, amount=t.amount, kind=t.kind, source=t.source)
+            CalendarItem(
+                date=t.date,
+                description=t.description,
+                amount=t.amount,
+                kind=t.kind,
+                source=t.source,
+                paid=t.paid,
+                transaction_id=t.id,
+                recurring_rule_id=t.recurring_rule_id,
+                installment_id=t.installment_id,
+                installment_number=t.installment_number,
+            )
         )
         if t.recurring_rule_id:
             posted_keys.add(("rule", t.recurring_rule_id, t.date))
@@ -70,6 +81,8 @@ def calendar(
                     amount=rule.amount,
                     kind=rule.kind,
                     source="recurring",
+                    paid=False,
+                    recurring_rule_id=rule.id,
                 )
             )
 
@@ -85,11 +98,110 @@ def calendar(
                     amount=installment.installment_amount,
                     kind=TransactionKind.expense,
                     source="installment",
+                    paid=False,
+                    installment_id=installment.id,
+                    installment_number=number,
                 )
             )
 
     items.sort(key=lambda i: i.date)
     return items
+
+
+@router.post("/mark-paid", response_model=TransactionOut)
+def mark_paid(
+    payload: MarkPaidRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Transaction:
+    """Marca uma conta como paga (ou não). Se já existe uma transação real
+    (lançada manualmente ou materializada pelo cron), só troca o status. Se
+    ainda é só uma ocorrência prevista de recorrência/parcela, materializa
+    ela antecipadamente já com o status escolhido -- por exemplo, marcar
+    como pago o aluguel do dia 10 no dia 8 já lança a transação de verdade,
+    ao invés de esperar o cron chegar na data."""
+    if payload.transaction_id is not None:
+        transaction = db.get(Transaction, payload.transaction_id)
+        if transaction is None or transaction.household_id != user.household_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Transação não encontrada")
+        transaction.paid = payload.paid
+        db.commit()
+        db.refresh(transaction)
+        return transaction
+
+    if payload.recurring_rule_id is not None:
+        if payload.occurrence_date is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "occurrence_date é obrigatório")
+        rule = db.get(RecurringRule, payload.recurring_rule_id)
+        if rule is None or rule.household_id != user.household_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Regra não encontrada")
+        existing = db.scalar(
+            select(Transaction).where(
+                Transaction.recurring_rule_id == rule.id, Transaction.date == payload.occurrence_date
+            )
+        )
+        if existing is not None:
+            existing.paid = payload.paid
+            db.commit()
+            db.refresh(existing)
+            return existing
+        transaction = Transaction(
+            household_id=rule.household_id,
+            user_id=user.id,
+            account_id=rule.account_id,
+            category_id=rule.category_id,
+            recurring_rule_id=rule.id,
+            date=payload.occurrence_date,
+            description=rule.description,
+            amount=rule.amount,
+            kind=rule.kind,
+            source=TransactionSource.recurring,
+            paid=payload.paid,
+        )
+        db.add(transaction)
+        db.commit()
+        db.refresh(transaction)
+        return transaction
+
+    if payload.installment_id is not None:
+        if payload.installment_number is None or payload.occurrence_date is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "installment_number e occurrence_date são obrigatórios"
+            )
+        installment = db.get(Installment, payload.installment_id)
+        if installment is None or installment.household_id != user.household_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcelamento não encontrado")
+        existing = db.scalar(
+            select(Transaction).where(
+                Transaction.installment_id == installment.id,
+                Transaction.installment_number == payload.installment_number,
+            )
+        )
+        if existing is not None:
+            existing.paid = payload.paid
+            db.commit()
+            db.refresh(existing)
+            return existing
+        transaction = Transaction(
+            household_id=installment.household_id,
+            user_id=user.id,
+            account_id=installment.account_id,
+            category_id=installment.category_id,
+            installment_id=installment.id,
+            installment_number=payload.installment_number,
+            date=payload.occurrence_date,
+            description=f"{installment.description} ({payload.installment_number}/{installment.installment_count})",
+            amount=installment.installment_amount,
+            kind=TransactionKind.expense,
+            source=TransactionSource.installment,
+            paid=payload.paid,
+        )
+        db.add(transaction)
+        db.commit()
+        db.refresh(transaction)
+        return transaction
+
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Informe transaction_id, recurring_rule_id ou installment_id")
 
 
 @router.get("/summary", response_model=SummaryOut)

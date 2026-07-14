@@ -58,6 +58,7 @@ def create_transaction(
         amount=payload.amount,
         kind=payload.kind,
         source=TransactionSource.manual,
+        paid=True,
     )
     db.add(transaction)
     db.commit()

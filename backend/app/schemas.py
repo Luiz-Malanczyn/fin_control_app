@@ -86,6 +86,7 @@ class AccountCreate(BaseModel):
     type: AccountType
     opening_balance: Decimal = Decimal(0)
     opening_balance_date: date = Field(default_factory=date.today)
+    due_day: int | None = Field(default=None, ge=1, le=31)
 
 
 class AccountOut(BaseModel):
@@ -95,6 +96,7 @@ class AccountOut(BaseModel):
     type: AccountType
     opening_balance: Decimal
     opening_balance_date: date
+    due_day: int | None
 
 
 class AccountUpdate(BaseModel):
@@ -102,6 +104,7 @@ class AccountUpdate(BaseModel):
     type: AccountType | None = None
     opening_balance: Decimal | None = None
     opening_balance_date: date | None = None
+    due_day: int | None = Field(default=None, ge=1, le=31)
 
 
 # --- categories ---
@@ -178,6 +181,7 @@ class TransactionOut(BaseModel):
     kind: TransactionKind
     source: TransactionSource
     installment_number: int | None
+    paid: bool
 
 
 class TransactionUpdate(BaseModel):
@@ -192,6 +196,7 @@ class TransactionUpdate(BaseModel):
     description: str | None = Field(default=None, min_length=1, max_length=200)
     amount: Decimal | None = Field(default=None, gt=0)
     kind: TransactionKind | None = None
+    paid: bool | None = None
 
 
 class ImportColumnMapping(BaseModel):
@@ -310,6 +315,20 @@ class CalendarItem(BaseModel):
     amount: Decimal
     kind: TransactionKind
     source: TransactionSource
+    paid: bool
+    transaction_id: int | None = None
+    recurring_rule_id: int | None = None
+    installment_id: int | None = None
+    installment_number: int | None = None
+
+
+class MarkPaidRequest(BaseModel):
+    transaction_id: int | None = None
+    recurring_rule_id: int | None = None
+    installment_id: int | None = None
+    installment_number: int | None = None
+    occurrence_date: date | None = None
+    paid: bool = True
 
 
 class CategorySummary(BaseModel):

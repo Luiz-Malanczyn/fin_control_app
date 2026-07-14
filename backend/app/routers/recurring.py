@@ -199,6 +199,7 @@ def run_daily_cron(db: Session = Depends(get_db)) -> dict[str, int]:
                     amount=rule.amount,
                     kind=rule.kind,
                     source=TransactionSource.recurring,
+                    paid=False,
                 )
             )
             created += 1
@@ -227,6 +228,7 @@ def run_daily_cron(db: Session = Depends(get_db)) -> dict[str, int]:
                     amount=installment.installment_amount,
                     kind=TransactionKind.expense,
                     source=TransactionSource.installment,
+                    paid=False,
                 )
             )
             created += 1

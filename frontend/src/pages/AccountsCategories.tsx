@@ -22,6 +22,7 @@ export default function AccountsCategories() {
   const [accountType, setAccountType] = useState<AccountType>('checking')
   const [openingBalance, setOpeningBalance] = useState('0')
   const [openingBalanceDate, setOpeningBalanceDate] = useState(today())
+  const [dueDay, setDueDay] = useState('')
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null)
 
   const [categoryName, setCategoryName] = useState('')
@@ -41,6 +42,7 @@ export default function AccountsCategories() {
     setAccountType(account.type)
     setOpeningBalance(account.opening_balance)
     setOpeningBalanceDate(account.opening_balance_date)
+    setDueDay(account.due_day ? String(account.due_day) : '')
   }
 
   function cancelEditAccount() {
@@ -48,6 +50,7 @@ export default function AccountsCategories() {
     setAccountName('')
     setOpeningBalance('0')
     setOpeningBalanceDate(today())
+    setDueDay('')
   }
 
   async function handleSubmitAccount(event: FormEvent) {
@@ -58,6 +61,7 @@ export default function AccountsCategories() {
       type: accountType,
       opening_balance: Number(openingBalance.replace(',', '.')) || 0,
       opening_balance_date: openingBalanceDate,
+      due_day: accountType === 'credit_card' && dueDay ? Number(dueDay) : null,
     }
     if (editingAccountId !== null) {
       await accountsApi.update(editingAccountId, payload)
@@ -68,6 +72,7 @@ export default function AccountsCategories() {
     setAccountName('')
     setOpeningBalance('0')
     setOpeningBalanceDate(today())
+    setDueDay('')
     reload()
   }
 
@@ -130,6 +135,20 @@ export default function AccountsCategories() {
                 onChange={(e) => setOpeningBalanceDate(e.target.value)}
               />
             </label>
+            {accountType === 'credit_card' && (
+              <label className="field">
+                Dia de vencimento
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={dueDay}
+                  onChange={(e) => setDueDay(e.target.value)}
+                  placeholder="10"
+                  style={{ width: 70 }}
+                />
+              </label>
+            )}
             <button className="btn" type="submit">
               {editingAccountId !== null ? 'Salvar edição' : 'Adicionar'}
             </button>
@@ -154,6 +173,7 @@ export default function AccountsCategories() {
                 <th>Tipo</th>
                 <th>Saldo inicial</th>
                 <th>A partir de</th>
+                <th>Vencimento</th>
                 <th></th>
               </tr>
             </thead>
@@ -164,6 +184,7 @@ export default function AccountsCategories() {
                   <td>{ACCOUNT_TYPE_LABELS[account.type]}</td>
                   <td>{formatCurrency(account.opening_balance)}</td>
                   <td>{account.opening_balance_date.split('-').reverse().join('/')}</td>
+                  <td>{account.due_day ? `dia ${account.due_day}` : '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button
                       className="btn-ghost"

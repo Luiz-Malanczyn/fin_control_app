@@ -30,6 +30,7 @@ def create_account(
         type=payload.type,
         opening_balance=payload.opening_balance,
         opening_balance_date=payload.opening_balance_date,
+        due_day=payload.due_day,
     )
     db.add(account)
     db.commit()

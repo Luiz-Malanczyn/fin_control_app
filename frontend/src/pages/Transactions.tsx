@@ -109,6 +109,11 @@ export default function Transactions() {
   const categoryName = (id: number | null) => categories.find((c) => c.id === id)?.name ?? '—'
   const accountName = (id: number) => accounts.find((a) => a.id === id)?.name ?? '—'
 
+  async function togglePaid(t: Transaction) {
+    await transactionsApi.update(t.id, { paid: !t.paid })
+    reloadTransactions()
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -210,6 +215,7 @@ export default function Transactions() {
                 <th>Categoria</th>
                 {members.length > 1 && <th>Lançado por</th>}
                 <th>Valor</th>
+                <th>Pago</th>
                 <th></th>
               </tr>
             </thead>
@@ -225,6 +231,9 @@ export default function Transactions() {
                   )}
                   <td className={t.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
                     {t.kind === 'expense' ? '-' : '+'} {formatCurrency(t.amount)}
+                  </td>
+                  <td>
+                    <input type="checkbox" checked={t.paid} onChange={() => togglePaid(t)} />
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => startEdit(t)}>

@@ -9,6 +9,7 @@ export type Account = {
   type: AccountType
   opening_balance: string
   opening_balance_date: string
+  due_day: number | null
 }
 
 export type HouseholdMember = {
@@ -58,6 +59,7 @@ export type Transaction = {
   kind: TransactionKind
   source: TransactionSource
   installment_number: number | null
+  paid: boolean
 }
 
 export type RecurringRule = {
@@ -91,6 +93,11 @@ export type CalendarItem = {
   amount: string
   kind: TransactionKind
   source: TransactionSource
+  paid: boolean
+  transaction_id: number | null
+  recurring_rule_id: number | null
+  installment_id: number | null
+  installment_number: number | null
 }
 
 export type CategorySummary = {
