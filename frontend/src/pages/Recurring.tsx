@@ -29,6 +29,7 @@ export default function Recurring() {
   const [ruleWeekday, setRuleWeekday] = useState('0')
   const [ruleStartDate, setRuleStartDate] = useState(today())
   const [ruleError, setRuleError] = useState<string | null>(null)
+  const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
 
   const [instAccountId, setInstAccountId] = useState<number | ''>('')
   const [instCategoryId, setInstCategoryId] = useState<number | ''>('')
@@ -37,6 +38,7 @@ export default function Recurring() {
   const [instCount, setInstCount] = useState('12')
   const [instStartDate, setInstStartDate] = useState(today())
   const [instError, setInstError] = useState<string | null>(null)
+  const [editingInstallmentId, setEditingInstallmentId] = useState<number | null>(null)
 
   function reload() {
     recurringApi.list().then(setRules)
@@ -63,7 +65,7 @@ export default function Recurring() {
       setRuleError('Preencha conta, descrição e um valor maior que zero.')
       return
     }
-    await recurringApi.create({
+    const payload = {
       account_id: ruleAccountId,
       category_id: ruleCategoryId === '' ? null : ruleCategoryId,
       description: ruleDescription,
@@ -73,10 +75,36 @@ export default function Recurring() {
       day_of_month: ruleFrequency === 'monthly' ? Number(ruleDayOfMonth) : null,
       weekday: ruleFrequency === 'weekly' ? Number(ruleWeekday) : null,
       start_date: ruleStartDate,
-    })
+    }
+    if (editingRuleId !== null) {
+      await recurringApi.update(editingRuleId, payload)
+      setEditingRuleId(null)
+    } else {
+      await recurringApi.create(payload)
+    }
     setRuleDescription('')
     setRuleAmount('')
     reload()
+  }
+
+  function startEditRule(rule: RecurringRule) {
+    setEditingRuleId(rule.id)
+    setRuleAccountId(rule.account_id)
+    setRuleCategoryId(rule.category_id ?? '')
+    setRuleDescription(rule.description)
+    setRuleAmount(rule.amount)
+    setRuleKind(rule.kind)
+    setRuleFrequency(rule.frequency)
+    setRuleDayOfMonth(String(rule.day_of_month ?? 5))
+    setRuleWeekday(String(rule.weekday ?? 0))
+    setRuleStartDate(rule.start_date)
+    setRuleError(null)
+  }
+
+  function cancelEditRule() {
+    setEditingRuleId(null)
+    setRuleDescription('')
+    setRuleAmount('')
   }
 
   async function handleCreateInstallment(event: FormEvent) {
@@ -88,17 +116,44 @@ export default function Recurring() {
       setInstError('Preencha conta, descrição, valor total e número de parcelas.')
       return
     }
-    await installmentsApi.create({
-      account_id: instAccountId,
-      category_id: instCategoryId === '' ? null : instCategoryId,
-      description: instDescription,
-      total_amount: parsedTotal,
-      installment_count: parsedCount,
-      start_date: instStartDate,
-    })
+    if (editingInstallmentId !== null) {
+      await installmentsApi.update(editingInstallmentId, {
+        account_id: instAccountId,
+        category_id: instCategoryId === '' ? null : instCategoryId,
+        description: instDescription,
+        start_date: instStartDate,
+      })
+      setEditingInstallmentId(null)
+    } else {
+      await installmentsApi.create({
+        account_id: instAccountId,
+        category_id: instCategoryId === '' ? null : instCategoryId,
+        description: instDescription,
+        total_amount: parsedTotal,
+        installment_count: parsedCount,
+        start_date: instStartDate,
+      })
+    }
     setInstDescription('')
     setInstTotal('')
     reload()
+  }
+
+  function startEditInstallment(inst: Installment) {
+    setEditingInstallmentId(inst.id)
+    setInstAccountId(inst.account_id)
+    setInstCategoryId(inst.category_id ?? '')
+    setInstDescription(inst.description)
+    setInstTotal(inst.total_amount)
+    setInstCount(String(inst.installment_count))
+    setInstStartDate(inst.start_date)
+    setInstError(null)
+  }
+
+  function cancelEditInstallment() {
+    setEditingInstallmentId(null)
+    setInstDescription('')
+    setInstTotal('')
   }
 
   const accountName = (id: number) => accounts.find((a) => a.id === id)?.name ?? '—'
@@ -110,7 +165,7 @@ export default function Recurring() {
       </div>
 
       <div className="card">
-        <h2>Conta fixa mensal ou semanal</h2>
+        <h2>{editingRuleId !== null ? 'Editar conta fixa' : 'Conta fixa mensal ou semanal'}</h2>
         <form onSubmit={handleCreateRule}>
           <div className="form-row">
             <label className="field">
@@ -189,8 +244,13 @@ export default function Recurring() {
               <input type="date" value={ruleStartDate} onChange={(e) => setRuleStartDate(e.target.value)} />
             </label>
             <button className="btn" type="submit">
-              Salvar
+              {editingRuleId !== null ? 'Salvar edição' : 'Salvar'}
             </button>
+            {editingRuleId !== null && (
+              <button className="btn-ghost" type="button" onClick={cancelEditRule}>
+                Cancelar
+              </button>
+            )}
           </div>
         </form>
         {ruleError && <p className="auth-error" style={{ marginTop: 10 }}>{ruleError}</p>}
@@ -221,7 +281,10 @@ export default function Recurring() {
                       ? `Todo dia ${rule.day_of_month}`
                       : WEEKDAY_LABELS[rule.weekday ?? 0]}
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => startEditRule(rule)}>
+                      editar
+                    </button>{' '}
                     <button className="btn-danger" onClick={() => recurringApi.remove(rule.id).then(reload)}>
                       remover
                     </button>
@@ -234,7 +297,7 @@ export default function Recurring() {
       </div>
 
       <div className="card">
-        <h2>Compra parcelada</h2>
+        <h2>{editingInstallmentId !== null ? 'Editar parcelamento' : 'Compra parcelada'}</h2>
         <form onSubmit={handleCreateInstallment}>
           <div className="form-row">
             <label className="field">
@@ -269,21 +332,44 @@ export default function Recurring() {
           <div className="form-row" style={{ marginTop: 10 }}>
             <label className="field">
               Valor total
-              <input value={instTotal} onChange={(e) => setInstTotal(e.target.value)} placeholder="3000,00" inputMode="decimal" />
+              <input
+                value={instTotal}
+                onChange={(e) => setInstTotal(e.target.value)}
+                placeholder="3000,00"
+                inputMode="decimal"
+                disabled={editingInstallmentId !== null}
+              />
             </label>
             <label className="field">
               Parcelas
-              <input type="number" min={1} max={120} value={instCount} onChange={(e) => setInstCount(e.target.value)} />
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={instCount}
+                onChange={(e) => setInstCount(e.target.value)}
+                disabled={editingInstallmentId !== null}
+              />
             </label>
             <label className="field">
               1ª parcela em
               <input type="date" value={instStartDate} onChange={(e) => setInstStartDate(e.target.value)} />
             </label>
             <button className="btn" type="submit">
-              Salvar
+              {editingInstallmentId !== null ? 'Salvar edição' : 'Salvar'}
             </button>
+            {editingInstallmentId !== null && (
+              <button className="btn-ghost" type="button" onClick={cancelEditInstallment}>
+                Cancelar
+              </button>
+            )}
           </div>
         </form>
+        {editingInstallmentId !== null && (
+          <p className="empty-hint" style={{ marginTop: -6, marginBottom: 10 }}>
+            Valor total e número de parcelas não podem ser alterados depois de criado — remova e cadastre de novo se precisar mudar isso.
+          </p>
+        )}
         {instError && <p className="auth-error" style={{ marginTop: 10 }}>{instError}</p>}
 
         {installments.length === 0 ? (
@@ -308,7 +394,10 @@ export default function Recurring() {
                     {formatCurrency(inst.installment_amount)} × {inst.installment_count}
                   </td>
                   <td>{formatCurrency(inst.total_amount)}</td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => startEditInstallment(inst)}>
+                      editar
+                    </button>{' '}
                     <button className="btn-danger" onClick={() => installmentsApi.remove(inst.id).then(reload)}>
                       remover
                     </button>

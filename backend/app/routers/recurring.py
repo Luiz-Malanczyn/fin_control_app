@@ -19,8 +19,10 @@ from app.recurrence import occurrences_for_installment, occurrences_for_rule
 from app.schemas import (
     InstallmentCreate,
     InstallmentOut,
+    InstallmentUpdate,
     RecurringRuleCreate,
     RecurringRuleOut,
+    RecurringRuleUpdate,
 )
 
 router = APIRouter(tags=["recurring"])
@@ -45,6 +47,31 @@ def create_recurring_rule(
 
     rule = RecurringRule(user_id=user.id, **payload.model_dump())
     db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@router.patch("/recurring-rules/{rule_id}", response_model=RecurringRuleOut)
+def update_recurring_rule(
+    rule_id: int,
+    payload: RecurringRuleUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RecurringRule:
+    rule = db.get(RecurringRule, rule_id)
+    if rule is None or rule.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Regra não encontrada")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if "account_id" in updates:
+        account = db.get(Account, updates["account_id"])
+        if account is None or account.user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
+
+    for field, value in updates.items():
+        setattr(rule, field, value)
+
     db.commit()
     db.refresh(rule)
     return rule
@@ -91,6 +118,31 @@ def create_installment(
         start_date=payload.start_date,
     )
     db.add(installment)
+    db.commit()
+    db.refresh(installment)
+    return installment
+
+
+@router.patch("/installments/{installment_id}", response_model=InstallmentOut)
+def update_installment(
+    installment_id: int,
+    payload: InstallmentUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Installment:
+    installment = db.get(Installment, installment_id)
+    if installment is None or installment.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcelamento não encontrado")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if "account_id" in updates:
+        account = db.get(Account, updates["account_id"])
+        if account is None or account.user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
+
+    for field, value in updates.items():
+        setattr(installment, field, value)
+
     db.commit()
     db.refresh(installment)
     return installment

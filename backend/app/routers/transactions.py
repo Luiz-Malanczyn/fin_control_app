@@ -26,6 +26,7 @@ from app.schemas import (
     ImportResult,
     TransactionCreate,
     TransactionOut,
+    TransactionUpdate,
 )
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -78,6 +79,31 @@ def create_transaction(
         source=TransactionSource.manual,
     )
     db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    return transaction
+
+
+@router.patch("/{transaction_id}", response_model=TransactionOut)
+def update_transaction(
+    transaction_id: int,
+    payload: TransactionUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Transaction:
+    transaction = db.get(Transaction, transaction_id)
+    if transaction is None or transaction.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Transação não encontrada")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if "account_id" in updates:
+        account = db.get(Account, updates["account_id"])
+        if account is None or account.user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
+
+    for field, value in updates.items():
+        setattr(transaction, field, value)
+
     db.commit()
     db.refresh(transaction)
     return transaction

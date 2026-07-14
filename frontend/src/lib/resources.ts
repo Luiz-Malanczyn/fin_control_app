@@ -43,6 +43,18 @@ export const transactionsApi = {
     amount: number
     kind: string
   }) => api.post<Transaction>('/transactions', payload).then((r) => r.data),
+  update: (
+    id: number,
+    payload: Partial<{
+      account_id: number
+      category_id: number | null
+      group_id: number | null
+      date: string
+      description: string
+      amount: number
+      kind: string
+    }>,
+  ) => api.patch<Transaction>(`/transactions/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/transactions/${id}`),
   importCsv: (
     accountId: number,
@@ -72,6 +84,8 @@ export const recurringApi = {
   list: () => api.get<RecurringRule[]>('/recurring-rules').then((r) => r.data),
   create: (payload: Record<string, unknown>) =>
     api.post<RecurringRule>('/recurring-rules', payload).then((r) => r.data),
+  update: (id: number, payload: Record<string, unknown>) =>
+    api.patch<RecurringRule>(`/recurring-rules/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/recurring-rules/${id}`),
 }
 
@@ -79,6 +93,8 @@ export const installmentsApi = {
   list: () => api.get<Installment[]>('/installments').then((r) => r.data),
   create: (payload: Record<string, unknown>) =>
     api.post<Installment>('/installments', payload).then((r) => r.data),
+  update: (id: number, payload: Record<string, unknown>) =>
+    api.patch<Installment>(`/installments/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/installments/${id}`),
 }
 

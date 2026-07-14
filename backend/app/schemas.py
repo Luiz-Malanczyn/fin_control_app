@@ -1,3 +1,4 @@
+import datetime as dt_module
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -121,6 +122,20 @@ class TransactionOut(BaseModel):
     installment_number: int | None
 
 
+class TransactionUpdate(BaseModel):
+    account_id: int | None = None
+    category_id: int | None = None
+    group_id: int | None = None
+    # dt_module.date (not the bare `date` import) is required here: a class-body
+    # annotated assignment `date: date | None = None` self-shadows, because the
+    # `= None` gets stored to the class attribute `date` before the annotation
+    # `date | None` is evaluated, so it resolves to `None | None` and raises.
+    date: dt_module.date | None = None
+    description: str | None = Field(default=None, min_length=1, max_length=200)
+    amount: Decimal | None = Field(default=None, gt=0)
+    kind: TransactionKind | None = None
+
+
 class ImportColumnMapping(BaseModel):
     date_column: str = "date"
     description_column: str = "description"
@@ -168,6 +183,19 @@ class RecurringRuleOut(BaseModel):
     end_date: date | None
 
 
+class RecurringRuleUpdate(BaseModel):
+    account_id: int | None = None
+    category_id: int | None = None
+    description: str | None = Field(default=None, min_length=1, max_length=200)
+    amount: Decimal | None = Field(default=None, gt=0)
+    kind: TransactionKind | None = None
+    frequency: RecurrenceFrequency | None = None
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+    weekday: int | None = Field(default=None, ge=0, le=6)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
 # --- installments ---
 
 
@@ -190,6 +218,13 @@ class InstallmentOut(BaseModel):
     installment_count: int
     installment_amount: Decimal
     start_date: date
+
+
+class InstallmentUpdate(BaseModel):
+    account_id: int | None = None
+    category_id: int | None = None
+    description: str | None = Field(default=None, min_length=1, max_length=200)
+    start_date: date | None = None
 
 
 # --- dashboard ---

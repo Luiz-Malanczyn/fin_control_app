@@ -36,6 +36,7 @@ export default function Transactions() {
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState<'expense' | 'income'>('expense')
   const [formError, setFormError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   const [importAccountId, setImportAccountId] = useState<number | ''>('')
   const [importFile, setImportFile] = useState<File | null>(null)
@@ -78,7 +79,25 @@ export default function Transactions() {
 
   useEffect(reloadTransactions, [dateFrom, dateTo])
 
-  async function handleCreate(event: FormEvent) {
+  function startEdit(t: Transaction) {
+    setEditingId(t.id)
+    setAccountId(t.account_id)
+    setCategoryId(t.category_id ?? '')
+    setGroupId(t.group_id ?? '')
+    setDate(t.date)
+    setDescription(t.description)
+    setAmount(t.amount)
+    setKind(t.kind)
+    setFormError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setDescription('')
+    setAmount('')
+  }
+
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setFormError(null)
     if (accountId === '') {
@@ -90,7 +109,7 @@ export default function Transactions() {
       setFormError('Preencha descrição e um valor maior que zero.')
       return
     }
-    await transactionsApi.create({
+    const payload = {
       account_id: accountId,
       category_id: categoryId === '' ? null : categoryId,
       group_id: groupId === '' ? null : groupId,
@@ -98,7 +117,13 @@ export default function Transactions() {
       description,
       amount: parsedAmount,
       kind,
-    })
+    }
+    if (editingId !== null) {
+      await transactionsApi.update(editingId, payload)
+      setEditingId(null)
+    } else {
+      await transactionsApi.create(payload)
+    }
     setDescription('')
     setAmount('')
     reloadTransactions()
@@ -144,8 +169,8 @@ export default function Transactions() {
       </div>
 
       <div className="card">
-        <h2>Novo lançamento</h2>
-        <form onSubmit={handleCreate}>
+        <h2>{editingId !== null ? 'Editar lançamento' : 'Novo lançamento'}</h2>
+        <form onSubmit={handleSubmit}>
           <div className="form-row">
             <label className="field">
               Conta
@@ -201,8 +226,13 @@ export default function Transactions() {
               <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="150,00" inputMode="decimal" />
             </label>
             <button className="btn" type="submit">
-              Lançar
+              {editingId !== null ? 'Salvar edição' : 'Lançar'}
             </button>
+            {editingId !== null && (
+              <button className="btn-ghost" type="button" onClick={cancelEdit}>
+                Cancelar
+              </button>
+            )}
           </div>
         </form>
         {formError && <p className="auth-error" style={{ marginTop: 10 }}>{formError}</p>}
@@ -323,7 +353,10 @@ export default function Transactions() {
                   <td className={t.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
                     {t.kind === 'expense' ? '-' : '+'} {formatCurrency(t.amount)}
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => startEdit(t)}>
+                      editar
+                    </button>{' '}
                     <button className="btn-danger" onClick={() => transactionsApi.remove(t.id).then(reloadTransactions)}>
                       remover
                     </button>
