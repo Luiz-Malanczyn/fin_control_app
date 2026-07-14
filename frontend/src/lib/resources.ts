@@ -4,12 +4,22 @@ import type {
   Category,
   CalendarItem,
   ForecastOut,
+  Household,
   Installment,
   RecurringRule,
   SummaryOut,
   Transaction,
   TransactionGroup,
 } from './types'
+
+export const householdApi = {
+  me: () => api.get<Household>('/household/me').then((r) => r.data),
+  rename: (name: string) => api.patch<Household>('/household/me', { name }).then((r) => r.data),
+  regenerateInvite: () =>
+    api.post<Household>('/household/me/regenerate-invite').then((r) => r.data),
+  join: (inviteCode: string) =>
+    api.post<Household>('/household/join', { invite_code: inviteCode }).then((r) => r.data),
+}
 
 export const accountsApi = {
   list: () => api.get<Account[]>('/accounts').then((r) => r.data),

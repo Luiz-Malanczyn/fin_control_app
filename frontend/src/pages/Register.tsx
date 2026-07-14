@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Register() {
   const { register } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [inviteCode, setInviteCode] = useState(searchParams.get('invite') ?? '')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -16,10 +18,15 @@ export default function Register() {
     setError(null)
     setIsSubmitting(true)
     try {
-      await register(email, password, name)
+      await register(email, password, name, inviteCode)
       navigate('/')
-    } catch {
-      setError('Não foi possível criar a conta. O e-mail já pode estar em uso.')
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      setError(
+        status === 404
+          ? 'Código de convite inválido.'
+          : 'Não foi possível criar a conta. O e-mail já pode estar em uso.',
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -52,6 +59,14 @@ export default function Register() {
             required
             minLength={8}
             autoComplete="new-password"
+          />
+        </label>
+        <label>
+          Código de convite <span style={{ fontWeight: 400 }}>(opcional)</span>
+          <input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+            placeholder="Se alguém já te chamou pro lar"
           />
         </label>
         {error && <p className="auth-error">{error}</p>}

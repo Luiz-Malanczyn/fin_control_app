@@ -14,7 +14,9 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 def list_groups(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[TransactionGroup]:
-    return list(db.scalars(select(TransactionGroup).where(TransactionGroup.user_id == user.id)))
+    return list(
+        db.scalars(select(TransactionGroup).where(TransactionGroup.household_id == user.household_id))
+    )
 
 
 @router.post("", response_model=TransactionGroupOut, status_code=status.HTTP_201_CREATED)
@@ -23,7 +25,7 @@ def create_group(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> TransactionGroup:
-    group = TransactionGroup(user_id=user.id, name=payload.name)
+    group = TransactionGroup(household_id=user.household_id, user_id=user.id, name=payload.name)
     db.add(group)
     db.commit()
     db.refresh(group)
@@ -37,7 +39,7 @@ def delete_group(
     user: User = Depends(get_current_user),
 ) -> None:
     group = db.get(TransactionGroup, group_id)
-    if group is None or group.user_id != user.id:
+    if group is None or group.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Grupo não encontrado")
     db.delete(group)
     db.commit()

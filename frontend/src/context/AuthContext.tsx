@@ -5,14 +5,16 @@ type User = {
   id: number
   email: string
   name: string
+  household_id: number
 }
 
 type AuthContextValue = {
   user: User | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, name: string) => Promise<void>
+  register: (email: string, password: string, name: string, inviteCode?: string) => Promise<void>
   logout: () => void
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -41,8 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(loggedUser)
   }
 
-  async function register(email: string, password: string, name: string) {
-    await api.post('/auth/register', { email, password, name })
+  async function register(email: string, password: string, name: string, inviteCode?: string) {
+    await api.post('/auth/register', {
+      email,
+      password,
+      name,
+      invite_code: inviteCode || undefined,
+    })
     await login(email, password)
   }
 
@@ -51,8 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
+  async function refreshUser() {
+    const { data } = await api.get<User>('/auth/me')
+    setUser(data)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

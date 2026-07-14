@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/recurring', label: 'Recorrências' },
   { to: '/calendar', label: 'Calendário' },
   { to: '/accounts', label: 'Contas & categorias' },
+  { to: '/household', label: 'Lar' },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {

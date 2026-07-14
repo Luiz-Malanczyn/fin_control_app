@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { accountsApi, categoriesApi, groupsApi, transactionsApi } from '../lib/resources'
+import { accountsApi, categoriesApi, groupsApi, householdApi, transactionsApi } from '../lib/resources'
 import {
   IMPORT_PRESETS,
   formatCurrency,
   type Account,
   type AmountConvention,
   type Category,
+  type HouseholdMember,
   type Transaction,
   type TransactionGroup,
 } from '../lib/types'
@@ -24,6 +25,7 @@ export default function Transactions() {
   const [categories, setCategories] = useState<Category[]>([])
   const [groups, setGroups] = useState<TransactionGroup[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [members, setMembers] = useState<HouseholdMember[]>([])
 
   const [dateFrom, setDateFrom] = useState(firstDayOfMonth())
   const [dateTo, setDateTo] = useState(today())
@@ -75,6 +77,7 @@ export default function Transactions() {
     })
     categoriesApi.list().then(setCategories)
     groupsApi.list().then(setGroups)
+    householdApi.me().then((h) => setMembers(h.members))
   }, [])
 
   useEffect(reloadTransactions, [dateFrom, dateTo])
@@ -339,6 +342,7 @@ export default function Transactions() {
                 <th>Descrição</th>
                 <th>Conta</th>
                 <th>Categoria</th>
+                {members.length > 1 && <th>Lançado por</th>}
                 <th>Valor</th>
                 <th></th>
               </tr>
@@ -350,6 +354,9 @@ export default function Transactions() {
                   <td>{t.description}</td>
                   <td>{accountName(t.account_id)}</td>
                   <td>{categoryName(t.category_id)}</td>
+                  {members.length > 1 && (
+                    <td>{members.find((m) => m.id === t.user_id)?.name ?? '—'}</td>
+                  )}
                   <td className={t.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
                     {t.kind === 'expense' ? '-' : '+'} {formatCurrency(t.amount)}
                   </td>

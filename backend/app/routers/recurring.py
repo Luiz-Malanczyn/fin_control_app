@@ -32,7 +32,9 @@ router = APIRouter(tags=["recurring"])
 def list_recurring_rules(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[RecurringRule]:
-    return list(db.scalars(select(RecurringRule).where(RecurringRule.user_id == user.id)))
+    return list(
+        db.scalars(select(RecurringRule).where(RecurringRule.household_id == user.household_id))
+    )
 
 
 @router.post("/recurring-rules", response_model=RecurringRuleOut, status_code=status.HTTP_201_CREATED)
@@ -42,10 +44,10 @@ def create_recurring_rule(
     user: User = Depends(get_current_user),
 ) -> RecurringRule:
     account = db.get(Account, payload.account_id)
-    if account is None or account.user_id != user.id:
+    if account is None or account.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
 
-    rule = RecurringRule(user_id=user.id, **payload.model_dump())
+    rule = RecurringRule(household_id=user.household_id, user_id=user.id, **payload.model_dump())
     db.add(rule)
     db.commit()
     db.refresh(rule)
@@ -60,13 +62,13 @@ def update_recurring_rule(
     user: User = Depends(get_current_user),
 ) -> RecurringRule:
     rule = db.get(RecurringRule, rule_id)
-    if rule is None or rule.user_id != user.id:
+    if rule is None or rule.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Regra não encontrada")
 
     updates = payload.model_dump(exclude_unset=True)
     if "account_id" in updates:
         account = db.get(Account, updates["account_id"])
-        if account is None or account.user_id != user.id:
+        if account is None or account.household_id != user.household_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
 
     for field, value in updates.items():
@@ -84,7 +86,7 @@ def delete_recurring_rule(
     user: User = Depends(get_current_user),
 ) -> None:
     rule = db.get(RecurringRule, rule_id)
-    if rule is None or rule.user_id != user.id:
+    if rule is None or rule.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Regra não encontrada")
     db.delete(rule)
     db.commit()
@@ -94,7 +96,9 @@ def delete_recurring_rule(
 def list_installments(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Installment]:
-    return list(db.scalars(select(Installment).where(Installment.user_id == user.id)))
+    return list(
+        db.scalars(select(Installment).where(Installment.household_id == user.household_id))
+    )
 
 
 @router.post("/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED)
@@ -104,10 +108,11 @@ def create_installment(
     user: User = Depends(get_current_user),
 ) -> Installment:
     account = db.get(Account, payload.account_id)
-    if account is None or account.user_id != user.id:
+    if account is None or account.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
 
     installment = Installment(
+        household_id=user.household_id,
         user_id=user.id,
         account_id=payload.account_id,
         category_id=payload.category_id,
@@ -131,13 +136,13 @@ def update_installment(
     user: User = Depends(get_current_user),
 ) -> Installment:
     installment = db.get(Installment, installment_id)
-    if installment is None or installment.user_id != user.id:
+    if installment is None or installment.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcelamento não encontrado")
 
     updates = payload.model_dump(exclude_unset=True)
     if "account_id" in updates:
         account = db.get(Account, updates["account_id"])
-        if account is None or account.user_id != user.id:
+        if account is None or account.household_id != user.household_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
 
     for field, value in updates.items():
@@ -155,7 +160,7 @@ def delete_installment(
     user: User = Depends(get_current_user),
 ) -> None:
     installment = db.get(Installment, installment_id)
-    if installment is None or installment.user_id != user.id:
+    if installment is None or installment.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Parcelamento não encontrado")
     db.delete(installment)
     db.commit()
@@ -184,6 +189,7 @@ def run_daily_cron(db: Session = Depends(get_db)) -> dict[str, int]:
                 continue
             db.add(
                 Transaction(
+                    household_id=rule.household_id,
                     user_id=rule.user_id,
                     account_id=rule.account_id,
                     category_id=rule.category_id,
@@ -210,6 +216,7 @@ def run_daily_cron(db: Session = Depends(get_db)) -> dict[str, int]:
                 continue
             db.add(
                 Transaction(
+                    household_id=installment.household_id,
                     user_id=installment.user_id,
                     account_id=installment.account_id,
                     category_id=installment.category_id,

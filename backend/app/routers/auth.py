@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import User
+from app.invite_codes import new_invite_code
+from app.models import Household, User
 from app.schemas import RefreshRequest, TokenPair, UserCreate, UserLogin, UserOut
 from app.security import (
     InvalidTokenError,
@@ -24,7 +25,17 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "E-mail já cadastrado")
 
+    if payload.invite_code:
+        household = db.scalar(select(Household).where(Household.invite_code == payload.invite_code.upper()))
+        if household is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Código de convite inválido")
+    else:
+        household = Household(name=f"Lar de {payload.name}", invite_code=new_invite_code())
+        db.add(household)
+        db.flush()
+
     user = User(
+        household_id=household.id,
         email=payload.email,
         name=payload.name,
         password_hash=hash_password(payload.password),

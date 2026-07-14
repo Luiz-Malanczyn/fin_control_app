@@ -14,7 +14,7 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 def list_accounts(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Account]:
-    return list(db.scalars(select(Account).where(Account.user_id == user.id)))
+    return list(db.scalars(select(Account).where(Account.household_id == user.household_id)))
 
 
 @router.post("", response_model=AccountOut, status_code=status.HTTP_201_CREATED)
@@ -23,7 +23,9 @@ def create_account(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Account:
-    account = Account(user_id=user.id, name=payload.name, type=payload.type)
+    account = Account(
+        household_id=user.household_id, user_id=user.id, name=payload.name, type=payload.type
+    )
     db.add(account)
     db.commit()
     db.refresh(account)
@@ -37,7 +39,7 @@ def delete_account(
     user: User = Depends(get_current_user),
 ) -> None:
     account = db.get(Account, account_id)
-    if account is None or account.user_id != user.id:
+    if account is None or account.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
     db.delete(account)
     db.commit()

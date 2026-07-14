@@ -42,7 +42,7 @@ def list_transactions(
     group_id: int | None = Query(default=None),
     account_id: int | None = Query(default=None),
 ) -> list[Transaction]:
-    stmt = select(Transaction).where(Transaction.user_id == user.id)
+    stmt = select(Transaction).where(Transaction.household_id == user.household_id)
     if date_from is not None:
         stmt = stmt.where(Transaction.date >= date_from)
     if date_to is not None:
@@ -64,10 +64,11 @@ def create_transaction(
     user: User = Depends(get_current_user),
 ) -> Transaction:
     account = db.get(Account, payload.account_id)
-    if account is None or account.user_id != user.id:
+    if account is None or account.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
 
     transaction = Transaction(
+        household_id=user.household_id,
         user_id=user.id,
         account_id=payload.account_id,
         category_id=payload.category_id,
@@ -92,13 +93,13 @@ def update_transaction(
     user: User = Depends(get_current_user),
 ) -> Transaction:
     transaction = db.get(Transaction, transaction_id)
-    if transaction is None or transaction.user_id != user.id:
+    if transaction is None or transaction.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transação não encontrada")
 
     updates = payload.model_dump(exclude_unset=True)
     if "account_id" in updates:
         account = db.get(Account, updates["account_id"])
-        if account is None or account.user_id != user.id:
+        if account is None or account.household_id != user.household_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
 
     for field, value in updates.items():
@@ -116,7 +117,7 @@ def delete_transaction(
     user: User = Depends(get_current_user),
 ) -> None:
     transaction = db.get(Transaction, transaction_id)
-    if transaction is None or transaction.user_id != user.id:
+    if transaction is None or transaction.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transação não encontrada")
     db.delete(transaction)
     db.commit()
@@ -142,7 +143,7 @@ def import_transactions(
         amount_convention=amount_convention,
     )
     account = db.get(Account, account_id)
-    if account is None or account.user_id != user.id:
+    if account is None or account.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada")
 
     raw = file.file.read().decode("utf-8-sig")
@@ -168,14 +169,17 @@ def import_transactions(
         (t.date, t.description, t.amount, t.kind)
         for t in db.scalars(
             select(Transaction).where(
-                Transaction.user_id == user.id, Transaction.account_id == account_id
+                Transaction.household_id == user.household_id, Transaction.account_id == account_id
             )
         )
     )
     seen_counts: Counter[tuple] = Counter()
 
     batch = ImportBatch(
-        user_id=user.id, filename=file.filename or "extrato.csv", status=ImportStatus.processing
+        household_id=user.household_id,
+        user_id=user.id,
+        filename=file.filename or "extrato.csv",
+        status=ImportStatus.processing,
     )
     db.add(batch)
     db.flush()
@@ -210,6 +214,7 @@ def import_transactions(
 
         db.add(
             Transaction(
+                household_id=user.household_id,
                 user_id=user.id,
                 account_id=account_id,
                 date=parsed_date,

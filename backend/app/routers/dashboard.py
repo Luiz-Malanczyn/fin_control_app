@@ -40,7 +40,7 @@ def calendar(
 
     posted = db.scalars(
         select(Transaction).where(
-            Transaction.user_id == user.id,
+            Transaction.household_id == user.household_id,
             Transaction.date >= date_from,
             Transaction.date <= date_to,
         )
@@ -55,7 +55,7 @@ def calendar(
         if t.installment_id:
             posted_keys.add(("installment", t.installment_id, t.installment_number))
 
-    rules = db.scalars(select(RecurringRule).where(RecurringRule.user_id == user.id))
+    rules = db.scalars(select(RecurringRule).where(RecurringRule.household_id == user.household_id))
     for rule in rules:
         for occurrence_date in occurrences_for_rule(rule, date_from, date_to):
             if ("rule", rule.id, occurrence_date) in posted_keys:
@@ -70,7 +70,7 @@ def calendar(
                 )
             )
 
-    installments = db.scalars(select(Installment).where(Installment.user_id == user.id))
+    installments = db.scalars(select(Installment).where(Installment.household_id == user.household_id))
     for installment in installments:
         for occurrence_date, number in occurrences_for_installment(installment, date_from, date_to):
             if ("installment", installment.id, number) in posted_keys:
@@ -99,7 +99,7 @@ def summary(
     transactions = list(
         db.scalars(
             select(Transaction).where(
-                Transaction.user_id == user.id,
+                Transaction.household_id == user.household_id,
                 Transaction.date >= date_from,
                 Transaction.date <= date_to,
             )
@@ -109,7 +109,7 @@ def summary(
     total_income = sum((t.amount for t in transactions if t.kind == TransactionKind.income), Decimal(0))
     total_expense = sum((t.amount for t in transactions if t.kind == TransactionKind.expense), Decimal(0))
 
-    categories = {c.id: c.name for c in db.scalars(select(Category).where(Category.user_id == user.id))}
+    categories = {c.id: c.name for c in db.scalars(select(Category).where(Category.household_id == user.household_id))}
     totals_by_category: dict[int | None, Decimal] = {}
     for t in transactions:
         if t.kind != TransactionKind.expense:
@@ -140,7 +140,7 @@ def forecast(db: Session = Depends(get_db), user: User = Depends(get_current_use
     month_start, month_end = _month_bounds(today)
 
     all_transactions = list(
-        db.scalars(select(Transaction).where(Transaction.user_id == user.id, Transaction.date <= today))
+        db.scalars(select(Transaction).where(Transaction.household_id == user.household_id, Transaction.date <= today))
     )
     current_balance = sum(
         (t.amount if t.kind == TransactionKind.income else -t.amount for t in all_transactions),
@@ -161,7 +161,7 @@ def forecast(db: Session = Depends(get_db), user: User = Depends(get_current_use
     expected_income_remaining = Decimal(0)
     fixed_expenses_remaining = Decimal(0)
     if tomorrow <= month_end:
-        rules = db.scalars(select(RecurringRule).where(RecurringRule.user_id == user.id))
+        rules = db.scalars(select(RecurringRule).where(RecurringRule.household_id == user.household_id))
         for rule in rules:
             occurrences = occurrences_for_rule(rule, max(tomorrow, month_start), month_end)
             total = rule.amount * len(occurrences)
@@ -171,7 +171,7 @@ def forecast(db: Session = Depends(get_db), user: User = Depends(get_current_use
                 fixed_expenses_remaining += total
 
         installments_remaining = Decimal(0)
-        installments = db.scalars(select(Installment).where(Installment.user_id == user.id))
+        installments = db.scalars(select(Installment).where(Installment.household_id == user.household_id))
         for installment in installments:
             occurrences = occurrences_for_installment(installment, max(tomorrow, month_start), month_end)
             installments_remaining += installment.installment_amount * len(occurrences)

@@ -26,6 +26,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: str = Field(min_length=1, max_length=120)
+    invite_code: str | None = Field(default=None, max_length=12)
 
 
 class UserLogin(BaseModel):
@@ -38,6 +39,7 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     name: str
+    household_id: int
 
 
 class TokenPair(BaseModel):
@@ -48,6 +50,32 @@ class TokenPair(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+# --- household (modo casal) ---
+
+
+class HouseholdMember(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    email: EmailStr
+
+
+class HouseholdOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    invite_code: str
+    members: list[HouseholdMember]
+
+
+class HouseholdRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class HouseholdJoin(BaseModel):
+    invite_code: str = Field(min_length=1, max_length=12)
 
 
 # --- accounts ---
@@ -114,6 +142,7 @@ class TransactionOut(BaseModel):
     account_id: int
     category_id: int | None
     group_id: int | None
+    user_id: int
     date: date
     description: str
     amount: Decimal

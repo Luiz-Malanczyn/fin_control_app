@@ -14,7 +14,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 def list_categories(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Category]:
-    return list(db.scalars(select(Category).where(Category.user_id == user.id)))
+    return list(db.scalars(select(Category).where(Category.household_id == user.household_id)))
 
 
 @router.post("", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
@@ -25,11 +25,15 @@ def create_category(
 ) -> Category:
     if payload.parent_id is not None:
         parent = db.get(Category, payload.parent_id)
-        if parent is None or parent.user_id != user.id:
+        if parent is None or parent.household_id != user.household_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Categoria pai não encontrada")
 
     category = Category(
-        user_id=user.id, name=payload.name, parent_id=payload.parent_id, color=payload.color
+        household_id=user.household_id,
+        user_id=user.id,
+        name=payload.name,
+        parent_id=payload.parent_id,
+        color=payload.color,
     )
     db.add(category)
     db.commit()
@@ -44,7 +48,7 @@ def delete_category(
     user: User = Depends(get_current_user),
 ) -> None:
     category = db.get(Category, category_id)
-    if category is None or category.user_id != user.id:
+    if category is None or category.household_id != user.household_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Categoria não encontrada")
     db.delete(category)
     db.commit()

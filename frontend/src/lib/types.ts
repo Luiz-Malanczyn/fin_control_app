@@ -9,6 +9,19 @@ export type Account = {
   type: AccountType
 }
 
+export type HouseholdMember = {
+  id: number
+  name: string
+  email: string
+}
+
+export type Household = {
+  id: number
+  name: string
+  invite_code: string
+  members: HouseholdMember[]
+}
+
 export type Category = {
   id: number
   name: string
@@ -26,6 +39,7 @@ export type Transaction = {
   account_id: number
   category_id: number | null
   group_id: number | null
+  user_id: number
   date: string
   description: string
   amount: string
