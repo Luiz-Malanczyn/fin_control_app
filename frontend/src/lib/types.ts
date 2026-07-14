@@ -7,6 +7,8 @@ export type Account = {
   id: number
   name: string
   type: AccountType
+  opening_balance: string
+  opening_balance_date: string
 }
 
 export type HouseholdMember = {

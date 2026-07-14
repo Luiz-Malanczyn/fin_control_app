@@ -24,8 +24,16 @@ export const householdApi = {
 
 export const accountsApi = {
   list: () => api.get<Account[]>('/accounts').then((r) => r.data),
-  create: (payload: { name: string; type: string }) =>
-    api.post<Account>('/accounts', payload).then((r) => r.data),
+  create: (payload: {
+    name: string
+    type: string
+    opening_balance?: number
+    opening_balance_date?: string
+  }) => api.post<Account>('/accounts', payload).then((r) => r.data),
+  update: (
+    id: number,
+    payload: Partial<{ name: string; type: string; opening_balance: number; opening_balance_date: string }>,
+  ) => api.patch<Account>(`/accounts/${id}`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/accounts/${id}`),
 }
 

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
+    Account,
     Category,
     Installment,
     RecurringRule,
@@ -139,13 +140,23 @@ def forecast(db: Session = Depends(get_db), user: User = Depends(get_current_use
     today = date.today()
     month_start, month_end = _month_bounds(today)
 
+    accounts = {
+        a.id: a for a in db.scalars(select(Account).where(Account.household_id == user.household_id))
+    }
+
     all_transactions = list(
         db.scalars(select(Transaction).where(Transaction.household_id == user.household_id, Transaction.date <= today))
     )
-    current_balance = sum(
-        (t.amount if t.kind == TransactionKind.income else -t.amount for t in all_transactions),
-        Decimal(0),
-    )
+
+    # Saldo atual = soma dos saldos iniciais de cada conta + só as transações
+    # lançadas a partir da respectiva data de referência. Lançamentos
+    # anteriores a essa data são histórico e não afetam o saldo.
+    current_balance = sum((a.opening_balance for a in accounts.values()), Decimal(0))
+    for t in all_transactions:
+        account = accounts.get(t.account_id)
+        if account is None or t.date < account.opening_balance_date:
+            continue
+        current_balance += t.amount if t.kind == TransactionKind.income else -t.amount
 
     expenses_posted = sum(
         (

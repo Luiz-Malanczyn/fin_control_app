@@ -74,6 +74,11 @@ class Account(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(120))
     type: Mapped[AccountType] = mapped_column(Enum(AccountType, native_enum=False))
+    # Saldo "ancora": lançamentos anteriores a opening_balance_date são só
+    # histórico e não entram no cálculo do saldo atual. Isso permite cadastrar
+    # gastos passados pra estatística sem precisar reconciliar o saldo real.
+    opening_balance: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    opening_balance_date: Mapped[date] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")

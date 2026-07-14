@@ -84,6 +84,8 @@ class HouseholdJoin(BaseModel):
 class AccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     type: AccountType
+    opening_balance: Decimal = Decimal(0)
+    opening_balance_date: date = Field(default_factory=date.today)
 
 
 class AccountOut(BaseModel):
@@ -91,6 +93,15 @@ class AccountOut(BaseModel):
     id: int
     name: str
     type: AccountType
+    opening_balance: Decimal
+    opening_balance_date: date
+
+
+class AccountUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    type: AccountType | None = None
+    opening_balance: Decimal | None = None
+    opening_balance_date: date | None = None
 
 
 # --- categories ---
