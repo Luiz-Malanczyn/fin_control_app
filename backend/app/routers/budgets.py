@@ -7,26 +7,24 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Budget, Category, Transaction, TransactionKind, User
+from app.models import Budget, Category, TransactionKind, User
 from app.routers.dashboard import _month_bounds
 from app.schemas import BudgetCreate, BudgetOut
+from app.spending import household_items_in_range
 
 router = APIRouter(prefix="/budgets", tags=["budgets"])
 
 
-def _spent_this_month(db: Session, household_id: int, category_id: int) -> Decimal:
+def _spent_by_category_this_month(db: Session, household_id: int) -> dict[int | None, Decimal]:
     today = date.today()
     month_start, month_end = _month_bounds(today)
-    transactions = db.scalars(
-        select(Transaction).where(
-            Transaction.household_id == household_id,
-            Transaction.category_id == category_id,
-            Transaction.kind == TransactionKind.expense,
-            Transaction.date >= month_start,
-            Transaction.date <= month_end,
-        )
-    )
-    return sum((t.amount for t in transactions), Decimal(0))
+    items = household_items_in_range(db, household_id, month_start, month_end)
+    totals: dict[int | None, Decimal] = {}
+    for amount, kind, category_id in items:
+        if kind != TransactionKind.expense:
+            continue
+        totals[category_id] = totals.get(category_id, Decimal(0)) + amount
+    return totals
 
 
 def _to_out(budget: Budget, category_name: str, spent: Decimal) -> BudgetOut:
@@ -47,9 +45,6 @@ def _to_out(budget: Budget, category_name: str, spent: Decimal) -> BudgetOut:
 def list_budgets(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[BudgetOut]:
-    today = date.today()
-    month_start, month_end = _month_bounds(today)
-
     budgets = list(db.scalars(select(Budget).where(Budget.household_id == user.household_id)))
     if not budgets:
         return []
@@ -60,18 +55,7 @@ def list_budgets(
         for c in db.scalars(select(Category).where(Category.id.in_(category_ids)))
     }
 
-    transactions = db.scalars(
-        select(Transaction).where(
-            Transaction.household_id == user.household_id,
-            Transaction.kind == TransactionKind.expense,
-            Transaction.date >= month_start,
-            Transaction.date <= month_end,
-            Transaction.category_id.in_(category_ids),
-        )
-    )
-    spent_by_category: dict[int, Decimal] = {}
-    for t in transactions:
-        spent_by_category[t.category_id] = spent_by_category.get(t.category_id, Decimal(0)) + t.amount
+    spent_by_category = _spent_by_category_this_month(db, user.household_id)
 
     return [
         _to_out(b, categories.get(b.category_id, "Sem categoria"), spent_by_category.get(b.category_id, Decimal(0)))
@@ -103,7 +87,7 @@ def upsert_budget(
     db.commit()
     db.refresh(budget)
 
-    spent = _spent_this_month(db, user.household_id, payload.category_id)
+    spent = _spent_by_category_this_month(db, user.household_id).get(payload.category_id, Decimal(0))
     return _to_out(budget, category.name, spent)
 
 

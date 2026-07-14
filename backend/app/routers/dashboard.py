@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.recurrence import occurrences_for_installment, occurrences_for_rule
 from app.schemas import CalendarItem, CategorySummary, ForecastOut, SummaryOut
+from app.spending import household_items_in_range
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -98,25 +99,20 @@ def summary(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SummaryOut:
-    transactions = list(
-        db.scalars(
-            select(Transaction).where(
-                Transaction.household_id == user.household_id,
-                Transaction.date >= date_from,
-                Transaction.date <= date_to,
-            )
-        )
-    )
+    # Transações reais + ocorrências de recorrência/parcela dentro do período
+    # que ainda não viraram transação (contas fixas aparecem no gráfico
+    # mesmo sem o cron ter rodado nelas, sem contar 2x quando ele rodar).
+    items = household_items_in_range(db, user.household_id, date_from, date_to)
 
-    total_income = sum((t.amount for t in transactions if t.kind == TransactionKind.income), Decimal(0))
-    total_expense = sum((t.amount for t in transactions if t.kind == TransactionKind.expense), Decimal(0))
+    total_income = sum((amount for amount, kind, _ in items if kind == TransactionKind.income), Decimal(0))
+    total_expense = sum((amount for amount, kind, _ in items if kind == TransactionKind.expense), Decimal(0))
 
     categories = {c.id: c.name for c in db.scalars(select(Category).where(Category.household_id == user.household_id))}
     totals_by_category: dict[int | None, Decimal] = {}
-    for t in transactions:
-        if t.kind != TransactionKind.expense:
+    for amount, kind, category_id in items:
+        if kind != TransactionKind.expense:
             continue
-        totals_by_category[t.category_id] = totals_by_category.get(t.category_id, Decimal(0)) + t.amount
+        totals_by_category[category_id] = totals_by_category.get(category_id, Decimal(0)) + amount
 
     by_category = [
         CategorySummary(
