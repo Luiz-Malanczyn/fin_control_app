@@ -24,6 +24,10 @@ class SpendingItem(NamedTuple):
     category_id: int | None
     group_id: int | None
     account_id: int
+    # Ocorrência projetada de recorrência/parcela ainda não materializada
+    # nasce sempre não paga, igual no Calendário -- só uma transação real
+    # carrega o status verdadeiro.
+    paid: bool
 
 
 def household_items_in_range(
@@ -32,6 +36,8 @@ def household_items_in_range(
     date_from: date,
     date_to: date,
     account_id: int | None = None,
+    category_id: int | None = None,
+    group_id: int | None = None,
 ) -> list[SpendingItem]:
     """Itens de um lar num período: transações reais + ocorrências de
     recorrência/parcela que caem no período mas ainda não viraram transação
@@ -42,15 +48,33 @@ def household_items_in_range(
     resumo por categoria/grupo, orçamentos, listagem de lançamentos — pra não
     depender do cron ter rodado numa data específica pra uma conta fixa
     aparecer.
+
+    Os filtros de conta/categoria/grupo são aplicados em Python (não na
+    query) sobre o conjunto completo de transações do período: a
+    deduplicação de recorrência/parcela materializada precisa enxergar TODAS
+    as transações já lançadas, mesmo as que um filtro esconde da listagem
+    final -- senão a ocorrência projetada correspondente reapareceria
+    duplicada.
     """
-    txn_stmt = select(Transaction).where(
-        Transaction.household_id == household_id,
-        Transaction.date >= date_from,
-        Transaction.date <= date_to,
+    all_transactions = list(
+        db.scalars(
+            select(Transaction).where(
+                Transaction.household_id == household_id,
+                Transaction.date >= date_from,
+                Transaction.date <= date_to,
+            )
+        )
     )
-    if account_id is not None:
-        txn_stmt = txn_stmt.where(Transaction.account_id == account_id)
-    transactions = list(db.scalars(txn_stmt))
+
+    def transaction_matches(t: Transaction) -> bool:
+        if account_id is not None and t.account_id != account_id:
+            return False
+        if category_id is not None and t.category_id != category_id:
+            return False
+        if group_id is not None and t.group_id != group_id:
+            return False
+        return True
+
     items: list[SpendingItem] = [
         SpendingItem(
             date=t.date,
@@ -60,53 +84,62 @@ def household_items_in_range(
             category_id=t.category_id,
             group_id=t.group_id,
             account_id=t.account_id,
+            paid=t.paid,
         )
-        for t in transactions
+        for t in all_transactions
+        if transaction_matches(t)
     ]
 
-    posted_rule_keys = {(t.recurring_rule_id, t.date) for t in transactions if t.recurring_rule_id}
+    posted_rule_keys = {(t.recurring_rule_id, t.date) for t in all_transactions if t.recurring_rule_id}
     posted_installment_keys = {
-        (t.installment_id, t.installment_number) for t in transactions if t.installment_id
+        (t.installment_id, t.installment_number) for t in all_transactions if t.installment_id
     }
 
-    rule_stmt = select(RecurringRule).where(RecurringRule.household_id == household_id)
-    if account_id is not None:
-        rule_stmt = rule_stmt.where(RecurringRule.account_id == account_id)
-    rules = db.scalars(rule_stmt)
-    for rule in rules:
-        for occurrence_date in occurrences_for_rule(rule, date_from, date_to):
-            if (rule.id, occurrence_date) in posted_rule_keys:
+    # Ocorrências projetadas nunca têm grupo (só lançamento manual/importado
+    # tem), então um filtro de grupo específico nunca pode incluí-las.
+    if group_id is None:
+        rules = db.scalars(select(RecurringRule).where(RecurringRule.household_id == household_id))
+        for rule in rules:
+            if account_id is not None and rule.account_id != account_id:
                 continue
-            items.append(
-                SpendingItem(
-                    date=occurrence_date,
-                    description=rule.description,
-                    amount=rule.amount,
-                    kind=rule.kind,
-                    category_id=rule.category_id,
-                    group_id=None,
-                    account_id=rule.account_id,
+            if category_id is not None and rule.category_id != category_id:
+                continue
+            for occurrence_date in occurrences_for_rule(rule, date_from, date_to):
+                if (rule.id, occurrence_date) in posted_rule_keys:
+                    continue
+                items.append(
+                    SpendingItem(
+                        date=occurrence_date,
+                        description=rule.description,
+                        amount=rule.amount,
+                        kind=rule.kind,
+                        category_id=rule.category_id,
+                        group_id=None,
+                        account_id=rule.account_id,
+                        paid=False,
+                    )
                 )
-            )
 
-    installment_stmt = select(Installment).where(Installment.household_id == household_id)
-    if account_id is not None:
-        installment_stmt = installment_stmt.where(Installment.account_id == account_id)
-    installments = db.scalars(installment_stmt)
-    for installment in installments:
-        for occurrence_date, number in occurrences_for_installment(installment, date_from, date_to):
-            if (installment.id, number) in posted_installment_keys:
+        installments = db.scalars(select(Installment).where(Installment.household_id == household_id))
+        for installment in installments:
+            if account_id is not None and installment.account_id != account_id:
                 continue
-            items.append(
-                SpendingItem(
-                    date=occurrence_date,
-                    description=f"{installment.description} ({number}/{installment.installment_count})",
-                    amount=installment.installment_amount,
-                    kind=TransactionKind.expense,
-                    category_id=installment.category_id,
-                    group_id=None,
-                    account_id=installment.account_id,
+            if category_id is not None and installment.category_id != category_id:
+                continue
+            for occurrence_date, number in occurrences_for_installment(installment, date_from, date_to):
+                if (installment.id, number) in posted_installment_keys:
+                    continue
+                items.append(
+                    SpendingItem(
+                        date=occurrence_date,
+                        description=f"{installment.description} ({number}/{installment.installment_count})",
+                        amount=installment.installment_amount,
+                        kind=TransactionKind.expense,
+                        category_id=installment.category_id,
+                        group_id=None,
+                        account_id=installment.account_id,
+                        paid=False,
+                    )
                 )
-            )
 
     return items

@@ -13,8 +13,16 @@ import {
 } from 'date-fns'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '../context/AuthContext'
-import { accountsApi, budgetsApi, dashboardApi } from '../lib/resources'
-import { formatCurrency, type Account, type Budget, type ForecastOut, type SummaryOut } from '../lib/types'
+import { accountsApi, budgetsApi, categoriesApi, dashboardApi, groupsApi } from '../lib/resources'
+import {
+  formatCurrency,
+  type Account,
+  type Budget,
+  type Category,
+  type ForecastOut,
+  type SummaryOut,
+  type TransactionGroup,
+} from '../lib/types'
 
 type Period = 'day' | 'week' | 'month' | 'year'
 
@@ -34,8 +42,12 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<SummaryOut | null>(null)
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [groups, setGroups] = useState<TransactionGroup[]>([])
   const [period, setPeriod] = useState<Period>('month')
   const [accountId, setAccountId] = useState<number | ''>('')
+  const [categoryId, setCategoryId] = useState<number | ''>('')
+  const [groupId, setGroupId] = useState<number | ''>('')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -45,6 +57,8 @@ export default function Dashboard() {
       .catch(() => setError('Não foi possível carregar a previsão. Cadastre uma conta para começar.'))
     budgetsApi.list().then(setBudgets)
     accountsApi.list().then(setAccounts)
+    categoriesApi.list().then(setCategories)
+    groupsApi.list().then(setGroups)
   }, [])
 
   const overBudget = budgets.filter((b) => b.percentage >= 100)
@@ -52,9 +66,13 @@ export default function Dashboard() {
   useEffect(() => {
     const [from, to] = rangeFor(period)
     dashboardApi
-      .summary(format(from, 'yyyy-MM-dd'), format(to, 'yyyy-MM-dd'), accountId === '' ? undefined : accountId)
+      .summary(format(from, 'yyyy-MM-dd'), format(to, 'yyyy-MM-dd'), {
+        accountId: accountId === '' ? undefined : accountId,
+        categoryId: categoryId === '' ? undefined : categoryId,
+        groupId: groupId === '' ? undefined : groupId,
+      })
       .then(setSummary)
-  }, [period, accountId])
+  }, [period, accountId, categoryId, groupId])
 
   const categoryData = (summary?.by_category ?? []).map((c) => ({
     name: c.category_name,
@@ -119,6 +137,22 @@ export default function Dashboard() {
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
+                </option>
+              ))}
+            </select>
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">Todas as categorias</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <select value={groupId} onChange={(e) => setGroupId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">Todos os grupos</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
                 </option>
               ))}
             </select>
@@ -198,6 +232,7 @@ export default function Dashboard() {
                     <th>Categoria</th>
                     <th>Grupo</th>
                     <th>Valor</th>
+                    <th>Pago</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -211,6 +246,7 @@ export default function Dashboard() {
                       <td className={item.kind === 'expense' ? 'amount-expense' : 'amount-income'}>
                         {item.kind === 'expense' ? '-' : '+'} {formatCurrency(item.amount)}
                       </td>
+                      <td>{item.kind === 'expense' ? <input type="checkbox" checked={item.paid} disabled /> : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

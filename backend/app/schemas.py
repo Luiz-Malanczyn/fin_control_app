@@ -349,6 +349,7 @@ class SummaryItem(BaseModel):
     description: str
     amount: Decimal
     kind: TransactionKind
+    paid: bool
     account_id: int
     account_name: str
     category_id: int | None

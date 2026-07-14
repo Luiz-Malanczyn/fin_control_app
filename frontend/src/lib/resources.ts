@@ -174,10 +174,20 @@ export const installmentsApi = {
 
 export const dashboardApi = {
   forecast: () => api.get<ForecastOut>('/dashboard/forecast').then((r) => r.data),
-  summary: (dateFrom: string, dateTo: string, accountId?: number) =>
+  summary: (
+    dateFrom: string,
+    dateTo: string,
+    filters?: { accountId?: number; categoryId?: number; groupId?: number },
+  ) =>
     api
       .get<SummaryOut>('/dashboard/summary', {
-        params: { date_from: dateFrom, date_to: dateTo, account_id: accountId },
+        params: {
+          date_from: dateFrom,
+          date_to: dateTo,
+          account_id: filters?.accountId,
+          category_id: filters?.categoryId,
+          group_id: filters?.groupId,
+        },
       })
       .then((r) => r.data),
   calendar: (dateFrom: string, dateTo: string) =>

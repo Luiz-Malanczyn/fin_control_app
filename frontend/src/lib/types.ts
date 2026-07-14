@@ -117,6 +117,7 @@ export type SummaryItem = {
   description: string
   amount: string
   kind: TransactionKind
+  paid: boolean
   account_id: number
   account_name: string
   category_id: number | null

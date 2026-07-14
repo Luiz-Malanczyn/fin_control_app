@@ -219,13 +219,17 @@ def summary(
     date_from: date = Query(...),
     date_to: date = Query(...),
     account_id: int | None = Query(default=None),
+    category_id: int | None = Query(default=None),
+    group_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SummaryOut:
     # Transações reais + ocorrências de recorrência/parcela dentro do período
     # que ainda não viraram transação (contas fixas aparecem no gráfico
     # mesmo sem o cron ter rodado nelas, sem contar 2x quando ele rodar).
-    items = household_items_in_range(db, user.household_id, date_from, date_to, account_id=account_id)
+    items = household_items_in_range(
+        db, user.household_id, date_from, date_to, account_id=account_id, category_id=category_id, group_id=group_id
+    )
 
     total_income = sum((i.amount for i in items if i.kind == TransactionKind.income), Decimal(0))
     total_expense = sum((i.amount for i in items if i.kind == TransactionKind.expense), Decimal(0))
@@ -272,6 +276,7 @@ def summary(
             description=item.description,
             amount=item.amount,
             kind=item.kind,
+            paid=item.paid,
             account_id=item.account_id,
             account_name=accounts.get(item.account_id, "—"),
             category_id=item.category_id,
@@ -279,7 +284,7 @@ def summary(
             group_id=item.group_id,
             group_name=groups.get(item.group_id, "Sem grupo"),
         )
-        for item in sorted(items, key=lambda i: i.date, reverse=True)
+        for item in sorted(items, key=lambda i: i.date)
     ]
 
     return SummaryOut(
