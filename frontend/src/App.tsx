@@ -9,6 +9,7 @@ import AccountsCategories from './pages/AccountsCategories'
 import Recurring from './pages/Recurring'
 import CalendarPage from './pages/Calendar'
 import HouseholdPage from './pages/Household'
+import Budgets from './pages/Budgets'
 import './App.css'
 
 function ProtectedLayout() {
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="/recurring" element={<Recurring />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/accounts" element={<AccountsCategories />} />
+        <Route path="/budgets" element={<Budgets />} />
         <Route path="/household" element={<HouseholdPage />} />
       </Route>
     </Routes>

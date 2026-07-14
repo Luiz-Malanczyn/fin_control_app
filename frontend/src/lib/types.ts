@@ -34,6 +34,16 @@ export type TransactionGroup = {
   name: string
 }
 
+export type Budget = {
+  id: number
+  category_id: number
+  category_name: string
+  amount: string
+  spent: string
+  remaining: string
+  percentage: number
+}
+
 export type Transaction = {
   id: number
   account_id: number

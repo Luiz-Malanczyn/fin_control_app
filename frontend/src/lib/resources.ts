@@ -1,6 +1,7 @@
 import { api } from './api'
 import type {
   Account,
+  Budget,
   Category,
   CalendarItem,
   ForecastOut,
@@ -33,6 +34,13 @@ export const categoriesApi = {
   create: (payload: { name: string; parent_id?: number | null; color?: string | null }) =>
     api.post<Category>('/categories', payload).then((r) => r.data),
   remove: (id: number) => api.delete(`/categories/${id}`),
+}
+
+export const budgetsApi = {
+  list: () => api.get<Budget[]>('/budgets').then((r) => r.data),
+  upsert: (categoryId: number, amount: number) =>
+    api.post<Budget>('/budgets', { category_id: categoryId, amount }).then((r) => r.data),
+  remove: (id: number) => api.delete(`/budgets/${id}`),
 }
 
 export const groupsApi = {

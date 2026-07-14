@@ -8,6 +8,7 @@
   --border: #dad7cd;
   --expense: #a2322a;
   --expense-soft: rgba(162, 50, 42, 0.1);
+  --warn: #a2682a;
 
   font: 16px/1.5 -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   color-scheme: light dark;
@@ -29,6 +30,7 @@
     --border: #2a342d;
     --expense: #e08a83;
     --expense-soft: rgba(224, 138, 131, 0.14);
+    --warn: #e0a968;
   }
 }
 

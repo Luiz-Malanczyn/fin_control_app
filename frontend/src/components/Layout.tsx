@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/recurring', label: 'Recorrências' },
   { to: '/calendar', label: 'Calendário' },
   { to: '/accounts', label: 'Contas & categorias' },
+  { to: '/budgets', label: 'Orçamentos' },
   { to: '/household', label: 'Lar' },
 ]
 

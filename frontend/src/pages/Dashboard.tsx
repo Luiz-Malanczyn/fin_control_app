@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { endOfDay, endOfMonth, endOfWeek, format, startOfDay, startOfMonth, startOfWeek } from 'date-fns'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '../context/AuthContext'
-import { dashboardApi } from '../lib/resources'
-import { formatCurrency, type ForecastOut, type SummaryOut } from '../lib/types'
+import { budgetsApi, dashboardApi } from '../lib/resources'
+import { formatCurrency, type Budget, type ForecastOut, type SummaryOut } from '../lib/types'
 
 type Period = 'day' | 'week' | 'month'
 
@@ -20,6 +21,7 @@ export default function Dashboard() {
   const { user } = useAuth()
   const [forecast, setForecast] = useState<ForecastOut | null>(null)
   const [summary, setSummary] = useState<SummaryOut | null>(null)
+  const [budgets, setBudgets] = useState<Budget[]>([])
   const [period, setPeriod] = useState<Period>('month')
   const [error, setError] = useState<string | null>(null)
 
@@ -28,7 +30,10 @@ export default function Dashboard() {
       .forecast()
       .then(setForecast)
       .catch(() => setError('Não foi possível carregar a previsão. Cadastre uma conta para começar.'))
+    budgetsApi.list().then(setBudgets)
   }, [])
+
+  const overBudget = budgets.filter((b) => b.percentage >= 100)
 
   useEffect(() => {
     const [from, to] = rangeFor(period)
@@ -53,6 +58,20 @@ export default function Dashboard() {
           <p className="eyebrow">Saldo previsto no fim do mês</p>
           <p className="forecast-amount">{formatCurrency(forecast.projected_month_end_balance)}</p>
           <p className="forecast-detail">Saldo atual: {formatCurrency(forecast.current_balance)}</p>
+        </div>
+      )}
+
+      {overBudget.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--expense)' }}>
+          <p className="eyebrow" style={{ color: 'var(--expense)' }}>
+            Orçamento estourado
+          </p>
+          <p style={{ margin: '4px 0 0', fontSize: 14 }}>
+            {overBudget.map((b) => b.category_name).join(', ')} —{' '}
+            <Link to="/budgets" style={{ color: 'var(--expense)' }}>
+              ver detalhes
+            </Link>
+          </p>
         </div>
       )}
 

@@ -110,6 +110,24 @@ class CategoryOut(BaseModel):
     color: str | None
 
 
+# --- budgets ---
+
+
+class BudgetCreate(BaseModel):
+    category_id: int
+    amount: Decimal = Field(gt=0)
+
+
+class BudgetOut(BaseModel):
+    id: int
+    category_id: int
+    category_name: str
+    amount: Decimal
+    spent: Decimal
+    remaining: Decimal
+    percentage: float
+
+
 # --- transaction groups ---
 
 
