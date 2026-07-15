@@ -1,3 +1,4 @@
+import calendar as calendar_module
 from datetime import date
 from decimal import Decimal
 from typing import NamedTuple
@@ -7,6 +8,23 @@ from sqlalchemy.orm import Session
 
 from app.models import Installment, RecurringRule, Transaction, TransactionKind
 from app.recurrence import occurrences_for_installment, occurrences_for_rule
+
+
+def next_due_date(purchase_date: date, due_day: int) -> date:
+    """Data de vencimento da fatura em que uma compra de cartão de crédito
+    cai: o próximo dia `due_day` a partir da data da compra (compra até o
+    dia due_day vence no mesmo mês; depois disso, vence só no mês seguinte).
+    Não há um dia de fechamento separado modelado, então essa é a aproximação
+    usada pra decidir em qual fatura uma compra entra.
+    """
+    year, month = purchase_date.year, purchase_date.month
+    if purchase_date.day > due_day:
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    last_day = calendar_module.monthrange(year, month)[1]
+    return date(year, month, min(due_day, last_day))
 
 
 class SpendingItem(NamedTuple):

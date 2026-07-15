@@ -10,6 +10,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     Account,
+    AccountType,
     Category,
     Installment,
     RecurringRule,
@@ -30,7 +31,7 @@ from app.schemas import (
     SummaryOut,
     TransactionOut,
 )
-from app.spending import household_items_in_range
+from app.spending import SpendingItem, household_items_in_range, next_due_date
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -224,12 +225,31 @@ def summary(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SummaryOut:
+    accounts = {a.id: a for a in db.scalars(select(Account).where(Account.household_id == user.household_id))}
+
+    def effective_date(item: SpendingItem) -> date:
+        # Compra de cartão de crédito "acontece" pro bolso na data em que a
+        # fatura vence, não na data da compra -- por isso no Resumo ela entra
+        # no período e é ordenada pela data de vencimento, não pela compra.
+        account = accounts.get(item.account_id)
+        if account is not None and account.type == AccountType.credit_card and account.due_day is not None:
+            return next_due_date(item.date, account.due_day)
+        return item.date
+
+    # Compras de cartão de crédito perto do fim do mês podem vencer só no mês
+    # seguinte, então busca um pouco antes de date_from pra não perder essas
+    # ocorrências quando o período pedido começa logo após o fechamento.
+    # Vencimento nunca é antes da data da compra, então não precisa alargar
+    # o fim do período.
+    fetch_from = date_from - timedelta(days=35)
+
     # Transações reais + ocorrências de recorrência/parcela dentro do período
     # que ainda não viraram transação (contas fixas aparecem no gráfico
     # mesmo sem o cron ter rodado nelas, sem contar 2x quando ele rodar).
-    items = household_items_in_range(
-        db, user.household_id, date_from, date_to, account_id=account_id, category_id=category_id, group_id=group_id
+    raw_items = household_items_in_range(
+        db, user.household_id, fetch_from, date_to, account_id=account_id, category_id=category_id, group_id=group_id
     )
+    items = [item for item in raw_items if date_from <= effective_date(item) <= date_to]
 
     total_income = sum((i.amount for i in items if i.kind == TransactionKind.income), Decimal(0))
     total_expense = sum((i.amount for i in items if i.kind == TransactionKind.expense), Decimal(0))
@@ -266,25 +286,27 @@ def summary(
         for gid, total in sorted(totals_by_group.items(), key=lambda kv: kv[1], reverse=True)
     ]
 
-    accounts = {a.id: a.name for a in db.scalars(select(Account).where(Account.household_id == user.household_id))}
+    account_names = {aid: a.name for aid, a in accounts.items()}
 
     # Listagem crua dos itens do período (mesmo filtro dos gráficos acima),
     # só pra visualização -- edição continua sendo feita na tela de Transações.
+    # A data mostrada/usada pra ordenar é a de vencimento pra itens de cartão
+    # de crédito (ver effective_date acima), não a data da compra em si.
     summary_items = [
         SummaryItem(
-            date=item.date,
+            date=effective_date(item),
             description=item.description,
             amount=item.amount,
             kind=item.kind,
             paid=item.paid,
             account_id=item.account_id,
-            account_name=accounts.get(item.account_id, "—"),
+            account_name=account_names.get(item.account_id, "—"),
             category_id=item.category_id,
             category_name=categories.get(item.category_id, "Sem categoria"),
             group_id=item.group_id,
             group_name=groups.get(item.group_id, "Sem grupo"),
         )
-        for item in sorted(items, key=lambda i: i.date)
+        for item in sorted(items, key=effective_date)
     ]
 
     return SummaryOut(
