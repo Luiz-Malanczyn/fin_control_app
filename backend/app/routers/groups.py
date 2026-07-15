@@ -45,7 +45,11 @@ def list_groups(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[TransactionGroupOut]:
     groups = list(
-        db.scalars(select(TransactionGroup).where(TransactionGroup.household_id == user.household_id))
+        db.scalars(
+            select(TransactionGroup)
+            .where(TransactionGroup.household_id == user.household_id)
+            .order_by(TransactionGroup.name)
+        )
     )
     pending = _pending_amounts(db, user.household_id)
     return [_to_out(g, pending.get(g.id, Decimal(0))) for g in groups]

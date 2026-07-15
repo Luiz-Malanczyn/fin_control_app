@@ -33,7 +33,11 @@ def list_recurring_rules(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[RecurringRule]:
     return list(
-        db.scalars(select(RecurringRule).where(RecurringRule.household_id == user.household_id))
+        db.scalars(
+            select(RecurringRule)
+            .where(RecurringRule.household_id == user.household_id)
+            .order_by(RecurringRule.description)
+        )
     )
 
 
@@ -97,7 +101,11 @@ def list_installments(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Installment]:
     return list(
-        db.scalars(select(Installment).where(Installment.household_id == user.household_id))
+        db.scalars(
+            select(Installment)
+            .where(Installment.household_id == user.household_id)
+            .order_by(Installment.start_date, Installment.description)
+        )
     )
 
 

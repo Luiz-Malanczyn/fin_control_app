@@ -33,7 +33,10 @@ def list_transactions(
         stmt = stmt.where(Transaction.group_id == group_id)
     if account_id is not None:
         stmt = stmt.where(Transaction.account_id == account_id)
-    stmt = stmt.order_by(Transaction.date.desc())
+    # Sem uma chave secundária, linhas com a mesma data não têm ordem
+    # garantida entre uma consulta e outra -- a tabela parecia embaralhar
+    # sozinha a cada edição, porque cada edição dispara um novo fetch.
+    stmt = stmt.order_by(Transaction.date.desc(), Transaction.description)
     return list(db.scalars(stmt))
 
 
