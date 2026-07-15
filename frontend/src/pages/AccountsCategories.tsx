@@ -27,6 +27,8 @@ export default function AccountsCategories() {
 
   const [categoryName, setCategoryName] = useState('')
   const [groupName, setGroupName] = useState('')
+  const [groupIsCreditCard, setGroupIsCreditCard] = useState(false)
+  const [groupDueDay, setGroupDueDay] = useState('')
 
   function reload() {
     accountsApi.list().then(setAccounts)
@@ -87,8 +89,36 @@ export default function AccountsCategories() {
   async function handleCreateGroup(event: FormEvent) {
     event.preventDefault()
     if (!groupName.trim()) return
-    await groupsApi.create({ name: groupName })
+    await groupsApi.create({
+      name: groupName,
+      is_credit_card: groupIsCreditCard,
+      due_day: groupIsCreditCard && groupDueDay ? Number(groupDueDay) : null,
+    })
     setGroupName('')
+    setGroupIsCreditCard(false)
+    setGroupDueDay('')
+    reload()
+  }
+
+  async function patchGroup(group: TransactionGroup, patch: Partial<{ name: string; is_credit_card: boolean; due_day: number | null }>) {
+    await groupsApi.update(group.id, patch)
+    reload()
+  }
+
+  function handleGroupNameBlur(group: TransactionGroup, value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === group.name) return
+    patchGroup(group, { name: trimmed })
+  }
+
+  function handleGroupDueDayBlur(group: TransactionGroup, value: string) {
+    const parsed = Number(value)
+    if (!parsed || parsed < 1 || parsed > 31) return
+    patchGroup(group, { due_day: parsed })
+  }
+
+  async function handlePayGroup(group: TransactionGroup) {
+    await groupsApi.pay(group.id)
     reload()
   }
 
@@ -245,27 +275,104 @@ export default function AccountsCategories() {
       <div className="card">
         <h2>Grupos de gastos</h2>
         <p className="empty-hint" style={{ marginTop: -8, marginBottom: 12 }}>
-          Agrupe transações relacionadas, como "Viagem SP" ou "Reforma".
+          Agrupe transações relacionadas, como "Viagem SP" ou "Reforma". Marque como fatura de
+          cartão de crédito pra ganhar um dia de vencimento e poder pagar todas as compras do
+          grupo de uma vez.
         </p>
-        <form className="form-row" onSubmit={handleCreateGroup}>
-          <label className="field">
-            Nome
-            <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Viagem SP" />
-          </label>
-          <button className="btn" type="submit">
-            Adicionar
-          </button>
+        <form onSubmit={handleCreateGroup}>
+          <div className="form-row">
+            <label className="field">
+              Nome
+              <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Viagem SP" />
+            </label>
+            <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={groupIsCreditCard}
+                onChange={(e) => setGroupIsCreditCard(e.target.checked)}
+              />
+              É fatura de cartão de crédito?
+            </label>
+            {groupIsCreditCard && (
+              <label className="field">
+                Dia de vencimento
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={groupDueDay}
+                  onChange={(e) => setGroupDueDay(e.target.value)}
+                  placeholder="10"
+                  style={{ width: 70 }}
+                />
+              </label>
+            )}
+            <button className="btn" type="submit">
+              Adicionar
+            </button>
+          </div>
         </form>
 
         {groups.length === 0 ? (
           <p className="empty-hint">Nenhum grupo cadastrado ainda.</p>
         ) : (
-          <table className="data-table">
+          <table className="data-table data-table-editable" style={{ marginTop: 14 }}>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Fatura de cartão?</th>
+                <th>Vencimento</th>
+                <th>Em aberto</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               {groups.map((group) => (
                 <tr key={group.id}>
-                  <td>{group.name}</td>
                   <td>
+                    <input
+                      key={`group-name-${group.id}-${group.name}`}
+                      defaultValue={group.name}
+                      onBlur={(e) => handleGroupNameBlur(group, e.target.value)}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={group.is_credit_card}
+                      onChange={() => patchGroup(group, { is_credit_card: !group.is_credit_card })}
+                    />
+                  </td>
+                  <td>
+                    {group.is_credit_card ? (
+                      <input
+                        key={`group-day-${group.id}-${group.due_day}`}
+                        type="number"
+                        min={1}
+                        max={31}
+                        defaultValue={group.due_day ?? ''}
+                        onBlur={(e) => handleGroupDueDayBlur(group, e.target.value)}
+                        style={{ width: 56 }}
+                      />
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className={Number(group.pending_amount) > 0 ? 'amount-expense' : undefined}>
+                    {group.is_credit_card ? formatCurrency(group.pending_amount) : '—'}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {group.is_credit_card && Number(group.pending_amount) > 0 && (
+                      <>
+                        <button
+                          className="btn-ghost"
+                          style={{ padding: '4px 8px', fontSize: 12 }}
+                          onClick={() => handlePayGroup(group)}
+                        >
+                          pagar fatura
+                        </button>{' '}
+                      </>
+                    )}
                     <button className="btn-danger" onClick={() => groupsApi.remove(group.id).then(reload)}>
                       remover
                     </button>

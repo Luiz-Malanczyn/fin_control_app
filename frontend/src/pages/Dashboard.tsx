@@ -62,6 +62,12 @@ export default function Dashboard() {
   }, [])
 
   const overBudget = budgets.filter((b) => b.percentage >= 100)
+  const openBills = groups.filter((g) => g.is_credit_card && Number(g.pending_amount) > 0)
+
+  async function handlePayGroup(group: TransactionGroup) {
+    await groupsApi.pay(group.id)
+    groupsApi.list().then(setGroups)
+  }
 
   useEffect(() => {
     const [from, to] = rangeFor(period)
@@ -111,6 +117,40 @@ export default function Dashboard() {
               ver detalhes
             </Link>
           </p>
+        </div>
+      )}
+
+      {openBills.length > 0 && (
+        <div className="card">
+          <h2 style={{ margin: '0 0 12px' }}>Faturas em aberto</h2>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Fatura</th>
+                <th>Vencimento</th>
+                <th>Em aberto</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {openBills.map((g) => (
+                <tr key={g.id}>
+                  <td>{g.name}</td>
+                  <td>{g.due_day ? `dia ${g.due_day}` : '—'}</td>
+                  <td className="amount-expense">{formatCurrency(g.pending_amount)}</td>
+                  <td>
+                    <button
+                      className="btn-ghost"
+                      style={{ padding: '4px 8px', fontSize: 12 }}
+                      onClick={() => handlePayGroup(g)}
+                    >
+                      pagar fatura
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

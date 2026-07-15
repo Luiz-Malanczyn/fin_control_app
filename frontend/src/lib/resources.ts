@@ -60,7 +60,11 @@ export const budgetsApi = {
 
 export const groupsApi = {
   list: () => api.get<TransactionGroup[]>('/groups').then((r) => r.data),
-  create: (payload: { name: string }) => api.post<TransactionGroup>('/groups', payload).then((r) => r.data),
+  create: (payload: { name: string; is_credit_card?: boolean; due_day?: number | null }) =>
+    api.post<TransactionGroup>('/groups', payload).then((r) => r.data),
+  update: (id: number, payload: Partial<{ name: string; is_credit_card: boolean; due_day: number | null }>) =>
+    api.patch<TransactionGroup>(`/groups/${id}`, payload).then((r) => r.data),
+  pay: (id: number) => api.post<TransactionGroup>(`/groups/${id}/pay`).then((r) => r.data),
   remove: (id: number) => api.delete(`/groups/${id}`),
 }
 

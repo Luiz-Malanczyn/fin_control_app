@@ -117,6 +117,12 @@ class TransactionGroup(Base):
     household_id: Mapped[int] = mapped_column(ForeignKey("households.id"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(120))
+    # Um grupo marcado como fatura de cartão de crédito ganha um dia de
+    # vencimento e uma ação de "pagar fatura" que marca de uma vez todas as
+    # transações do grupo que ainda estão em aberto -- em vez de precisar
+    # marcar cada compra da fatura como paga uma por uma.
+    is_credit_card: Mapped[bool] = mapped_column(default=False)
+    due_day: Mapped[int | None] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

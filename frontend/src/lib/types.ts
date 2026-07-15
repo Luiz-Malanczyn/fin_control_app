@@ -35,6 +35,9 @@ export type Category = {
 export type TransactionGroup = {
   id: number
   name: string
+  is_credit_card: boolean
+  due_day: number | null
+  pending_amount: string
 }
 
 export type Budget = {

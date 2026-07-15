@@ -147,12 +147,25 @@ class BudgetOut(BaseModel):
 
 class TransactionGroupCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    is_credit_card: bool = False
+    due_day: int | None = Field(default=None, ge=1, le=31)
+
+
+class TransactionGroupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    is_credit_card: bool | None = None
+    due_day: int | None = Field(default=None, ge=1, le=31)
 
 
 class TransactionGroupOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    is_credit_card: bool
+    due_day: int | None
+    # Soma das despesas do grupo ainda não pagas -- quanto falta pagar dessa
+    # fatura agora. Não inclui receitas nem despesas já quitadas.
+    pending_amount: Decimal
 
 
 # --- transactions ---
